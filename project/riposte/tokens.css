@@ -1,0 +1,153 @@
+/* ============================================================
+   RIPOSTE — design tokens · Riposta brand palette
+   Deep navy #1C2A44 + gold #C9A252
+   Light: navy as brand action · Dark: navy as surface, gold as accent
+   ============================================================ */
+
+:root {
+  /* ---- Light theme (Admin + Athlete) ---- */
+  --paper:        #F3F6FB;
+  --surface:      #FFFFFF;
+  --elevated:     #FFFFFF;
+  --ink:          #1C2A44;
+  --muted:        #4E6888;
+  --faint:        #7A90A8;
+  --hairline:     #D0DAEA;
+
+  --brand:        #1C2A44;
+  --brand-hover:  #0F1E35;
+  --brand-tint:   #E4EBF7;
+
+  /* Riposta Gold — secondary accent, dark-mode brand */
+  --gold:         #C9A252;
+  --gold-hover:   #B8912E;
+  --gold-tint:    #F6EDD5;
+
+  /* Status — semantic only, never chrome */
+  --success:      #1E7A4C;  --success-tint: #E8F3EC;
+  --warning:      #B5791A;  --warning-tint: #FBF1DC;
+  --danger:       #9B2020;  --danger-tint:  #FBEBEC;
+  --steel:        #4A6080;  --steel-tint:   #E4EBF5;
+  --live:         #E23B3B;
+
+  --focus:        rgba(28,42,68,0.40);
+
+  /* ---- Type ---- */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-ui:      'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:    'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* ---- Spacing (4px grid) ---- */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s6: 24px; --s8: 32px; --s12: 48px;
+
+  /* ---- Radius ---- */
+  --r-cal: 4px;  --r-btn: 8px;  --r-card: 12px;  --r-pill: 9999px;
+
+  /* ---- Elevation ---- */
+  --shadow-rest:  0 1px 2px rgba(28,42,68,.07);
+  --shadow-raise: 0 8px 24px rgba(28,42,68,.12);
+
+  /* ---- Motion ---- */
+  --d-instant: 80ms; --d-fast: 120ms; --d-base: 200ms;
+  --d-slow: 320ms;   --d-deliberate: 480ms;
+  --e-standard: cubic-bezier(.2,0,0,1);
+  --e-enter:    cubic-bezier(0,0,0,1);
+  --e-exit:     cubic-bezier(.3,0,1,1);
+  --e-spring:   cubic-bezier(.34,1.56,.64,1);
+}
+
+/* ---- Dark theme (Coach console at the salle) ---- */
+.theme-dark {
+  --paper:        #0C1A2E;
+  --surface:      #1C2A44;
+  --elevated:     #243659;
+  --ink:          #EEE8D8;
+  --muted:        #8BA0BC;
+  --faint:        #516A85;
+  --hairline:     #283D5C;
+
+  --brand:        #C9A252;
+  --brand-hover:  #D4AD62;
+  --brand-tint:   #2A2010;
+
+  --gold:         #C9A252;
+  --gold-hover:   #D4AD62;
+  --gold-tint:    #2A2010;
+
+  --success:      #34A06A;  --success-tint: #16271E;
+  --warning:      #E0A93A;  --warning-tint: #2A2210;
+  --danger:       #E2616C;  --danger-tint:  #2A1618;
+  --steel:        #7E8CA8;  --steel-tint:   #1B2A40;
+  --live:         #FF5A5A;
+
+  --focus:        rgba(201,162,82,0.45);
+
+  --shadow-rest:  0 1px 2px rgba(0,0,0,.35);
+  --shadow-raise: 0 8px 24px rgba(0,0,0,.50);
+}
+
+/* ---- Base resets ---- */
+* { box-sizing: border-box; }
+
+.r-tabular { font-variant-numeric: tabular-nums; }
+
+.r-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 540;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+.r-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Focus ring */
+.r-focusable:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Shimmer skeleton */
+@keyframes r-shimmer {
+  0%   { background-position: -180% 0; }
+  100% { background-position: 180% 0; }
+}
+.r-skeleton {
+  background: linear-gradient(90deg,
+    color-mix(in oklab, var(--hairline) 55%, transparent) 25%,
+    color-mix(in oklab, var(--hairline) 18%, transparent) 50%,
+    color-mix(in oklab, var(--hairline) 55%, transparent) 75%);
+  background-size: 220% 100%;
+  animation: r-shimmer 1.2s linear infinite;
+  border-radius: 6px;
+}
+
+/* Live dot pulse */
+@keyframes r-live-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+.r-live-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--live);
+  animation: r-live-pulse 1.6s ease-in-out infinite;
+}
+
+/* List enter stagger */
+@keyframes r-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Invalid drop shake */
+@keyframes r-shake {
+  0%,100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
