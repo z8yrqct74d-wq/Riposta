@@ -7,21 +7,19 @@ export default function AuthCallback() {
   const navigate = useNavigate();
 
   React.useEffect(() => {
-    function getReturnUrl() {
-      const stored = sessionStorage.getItem('auth_return');
-      if (stored) { sessionStorage.removeItem('auth_return'); return stored; }
-      return '/';
-    }
+    // Read once at mount so both handlers navigate to the same place
+    const returnTo = sessionStorage.getItem('auth_return') || '/';
+    sessionStorage.removeItem('auth_return');
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
         subscription.unsubscribe();
-        navigate(getReturnUrl(), { replace: true });
+        navigate(returnTo, { replace: true });
       }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) navigate(getReturnUrl(), { replace: true });
+      if (session) navigate(returnTo, { replace: true });
     });
 
     return () => subscription.unsubscribe();
