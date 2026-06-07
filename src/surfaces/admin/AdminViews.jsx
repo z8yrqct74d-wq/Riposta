@@ -1,6 +1,7 @@
 import React from 'react';
 import { WeaponGlyph, WEAPON_LABEL, Icon, Avatar, PaymentPill, VisaBadge, WeaponChip } from '../../components/Shared';
 import { KIND } from '../../data/adminData';
+import { getMembers } from '../../lib/db';
 
 export function StatCard({ children, style }) {
   return <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 18, ...style }}>{children}</div>;
@@ -112,7 +113,29 @@ export const PAY_BAR = { paid: 'var(--success)', due: 'var(--warning)', overdue:
 export function AdminMembers({ onSelectMember }) {
   const [q, setQ] = React.useState('');
   const [wf, setWf] = React.useState(null);
-  const rows = MEMBERS.filter(m => (!wf || m.weapon === wf) && m.name.toLowerCase().includes(q.toLowerCase()));
+  const [allMembers, setAllMembers] = React.useState(MEMBERS);
+
+  React.useEffect(() => {
+    getMembers()
+      .then(data => {
+        if (data?.length) {
+          setAllMembers(data.map(m => ({
+            id: m.id,
+            name: m.name,
+            cat: m.category,
+            weapon: m.weapon,
+            plan: m.plan_name,
+            credits: m.credits,
+            pay: m.pay_status,
+            visa: m.visa_status,
+            last: m.last_seen,
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const rows = allMembers.filter(m => (!wf || m.weapon === wf) && m.name.toLowerCase().includes(q.toLowerCase()));
   return (
     <div style={{ display: 'flex', height: '100%' }}>
       <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--hairline)', padding: 20, background: 'var(--surface)' }}>

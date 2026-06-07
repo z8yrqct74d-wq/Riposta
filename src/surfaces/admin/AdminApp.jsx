@@ -7,6 +7,7 @@ import { AdminDashboard, AdminMembers } from './AdminViews';
 import { MemberDetail } from './AdminMemberDetail';
 import { AdminCoaches } from './AdminCoaches';
 import { AdminPlans, AdminSettings } from './AdminPlansSettings';
+import { getCalendarBlocks, createCalendarBlock, updateCalendarBlock, deleteCalendarBlock } from '../../lib/db';
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid' },
@@ -219,26 +220,42 @@ function AdminApp() {
   const [digest, setDigest] = React.useState(true);
   const [selMember, setSelMember] = React.useState(null);
 
+  // Load blocks from Supabase on mount
+  React.useEffect(() => {
+    getCalendarBlocks()
+      .then(data => { if (data.length) setBlocks(data); })
+      .catch(() => {}); // silently fall back to INITIAL_BLOCKS
+  }, []);
+
   const fireToast = (msg, tone) => { setToast({ msg, tone }); setTimeout(() => setToast(null), 2600); };
 
   const openCreate = (partial) => { setPanelConflict(null); setDraft({ kind: 'lesson', title: '', piste: 'p1', start: 18*60, dur: 45, coach: 'sandu', weapon: 'sabre', ...partial }); };
   const openEdit = (b) => { setPanelConflict(null); setDraft({ ...b }); };
   const changeDraft = (patch) => setDraft(d => ({ ...d, ...patch }));
 
-  const saveDraft = () => {
+  const saveDraft = async () => {
     const cand = { id: draft.id || 'new', piste: draft.piste, start: draft.start, dur: draft.dur, coach: draft.kind === 'open' ? null : draft.coach };
     const c = findConflicts(cand, blocks);
     if (c.any) { setPanelConflict(c.pisteClash ? 'That piste is already booked for this time.' : 'That coach is already booked for this time.'); return; }
+    const cleaned = { ...draft, coach: draft.kind === 'open' ? null : draft.coach };
     if (draft.id) {
-      setBlocks(bs => bs.map(b => b.id === draft.id ? { ...draft, coach: draft.kind==='open'?null:draft.coach } : b));
+      setBlocks(bs => bs.map(b => b.id === draft.id ? cleaned : b));
+      updateCalendarBlock(draft.id, cleaned).catch(() => {});
       fireToast('Block updated', 'success');
     } else {
-      setBlocks(bs => [...bs, { ...draft, id: 'b' + Date.now(), coach: draft.kind==='open'?null:draft.coach }]);
+      const newBlock = { ...cleaned, id: 'b' + Date.now() };
+      setBlocks(bs => [...bs, newBlock]);
+      createCalendarBlock(newBlock).catch(() => {});
       fireToast('Block created', 'success');
     }
     setDraft(null);
   };
-  const deleteDraft = () => { setBlocks(bs => bs.filter(b => b.id !== draft.id)); setDraft(null); fireToast('Block removed', 'default'); };
+  const deleteDraft = () => {
+    setBlocks(bs => bs.filter(b => b.id !== draft.id));
+    deleteCalendarBlock(draft.id).catch(() => {});
+    setDraft(null);
+    fireToast('Block removed', 'default');
+  };
 
   const titles = {
     dashboard: ['Dashboard', 'Friday, 6 June 2026'],

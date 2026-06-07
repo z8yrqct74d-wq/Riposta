@@ -2,6 +2,7 @@ import React from 'react';
 import { Icon, Avatar, WeaponGlyph, WeaponChip } from '../../components/Shared';
 import { IOSDevice } from '../../components/IOSFrame';
 import { SessionAttendance, LessonView } from './CoachSession';
+import { getMembers } from '../../lib/db';
 
 const CKIND = { lesson: 'var(--brand)', group: 'var(--steel)', open: 'var(--hairline)' };
 
@@ -236,7 +237,27 @@ const COACH_ATHLETES = [
 
 function CoachAthletes() {
   const [q, setQ] = React.useState('');
-  const rows = COACH_ATHLETES.filter(a => a.name.toLowerCase().includes(q.toLowerCase()));
+  const [athletes, setAthletes] = React.useState(COACH_ATHLETES);
+
+  React.useEffect(() => {
+    getMembers()
+      .then(data => {
+        if (data?.length) {
+          setAthletes(data.map(m => ({
+            name: m.name,
+            cat: m.category,
+            credits: m.credits,
+            lastSeen: m.last_seen ?? '—',
+            att: 85,
+            weapon: m.weapon,
+            streak: 0,
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const rows = athletes.filter(a => a.name.toLowerCase().includes(q.toLowerCase()));
   return (
     <div style={{ height: '100%', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '56px 16px 12px', flexShrink: 0 }}>

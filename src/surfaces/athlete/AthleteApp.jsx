@@ -5,6 +5,7 @@ import { WeaponGlyph } from '../../components/Shared';
 import { BookFlow } from './AthleteBook';
 import { ScheduleScreen, PaymentsScreen, ProgressScreen, CheckinScreen, ColorBarRow } from './AthleteMisc';
 import { ProfileScreen } from './AthleteMisc';
+import { getMembers, createBooking } from '../../lib/db';
 
 function CreditMeter({ total = 6, used = 1, compact }) {
   const left = total - used;
@@ -133,6 +134,17 @@ function AthleteApp() {
   const [booking, setBooking] = React.useState(false);
   const [checkin, setCheckin] = React.useState(false);
   const [credits, setCredits] = React.useState(6);
+  const [memberId, setMemberId] = React.useState(null);
+
+  // Load Maya Rocha's credits from Supabase (demo: first member named Maya)
+  React.useEffect(() => {
+    getMembers()
+      .then(data => {
+        const maya = data?.find(m => m.name.includes('Maya'));
+        if (maya) { setCredits(maya.credits); setMemberId(maya.id); }
+      })
+      .catch(() => {});
+  }, []);
 
   const goProfile = (section) => {
     setProfileSection(section);
@@ -160,7 +172,19 @@ function AthleteApp() {
       {!booking && !checkin && <TabBar active={tab} onChange={changeTab} />}
 
       {booking && (
-        <BookFlow credits={credits} onClose={() => setBooking(false)} onBooked={() => setCredits(c => c - 1)} />
+        <BookFlow credits={credits} onClose={() => setBooking(false)} onBooked={(slot) => {
+          setCredits(c => c - 1);
+          if (memberId) {
+            createBooking({
+              member_id: memberId,
+              coach_id: slot?.coachId ?? null,
+              slot_date: slot?.date ?? null,
+              slot_time: slot?.time ?? null,
+              piste: slot?.piste ?? null,
+              weapon: slot?.weapon ?? null,
+            }).catch(() => {});
+          }
+        }} />
       )}
       {checkin && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 70, animation: 'r-sheet-up 240ms var(--e-enter) both' }}>
