@@ -193,8 +193,13 @@ function TabBar({ active, onChange }) {
     <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 40, background: 'color-mix(in oklab, var(--surface) 86%, transparent)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderTop: '1px solid var(--hairline)', paddingBottom: 26 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '8px 4px 4px' }}>
         {tabs.map(t => (
-          <button key={t.id} onClick={() => onChange(t.id)} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: 'none', background: 'transparent', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '4px 6px', flex: 1 }}>
-            <Icon name={t.icon} size={22} color={active === t.id ? 'var(--brand)' : 'var(--faint)'} strokeWidth={active === t.id ? 2 : 1.6} />
+          <button key={t.id} onClick={() => onChange(t.id)} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: 'none', background: 'transparent', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '4px 6px', flex: 1, position: 'relative' }}>
+            <div style={{ position: 'relative' }}>
+              <Icon name={t.icon} size={22} color={active === t.id ? 'var(--brand)' : 'var(--faint)'} strokeWidth={active === t.id ? 2 : 1.6} />
+              {t.id === 'payments' && (
+                <div style={{ position: 'absolute', top: -1, right: -3, width: 7, height: 7, borderRadius: '50%', background: '#F59E0B', border: '1.5px solid var(--surface)' }} />
+              )}
+            </div>
             <span style={{ fontSize: 10.5, fontWeight: active === t.id ? 600 : 500, color: active === t.id ? 'var(--brand)' : 'var(--faint)' }}>{t.label}</span>
           </button>
         ))}

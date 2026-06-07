@@ -184,61 +184,96 @@ function XMoneySheet({ paid, onPay, onDone }) {
 }
 
 export function PaymentsScreen() {
-  const [sheet, setSheet] = React.useState(false);
-  const [paid, setPaid] = React.useState(false);
   return (
-    <div style={{ height: '100%', position: 'relative' }}>
-      <PageHead title="Payments" />
-      <div className="r-scroll" style={{ overflowY: 'auto', height: 'calc(100% - 96px)', padding: '8px 16px 100px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <div style={{ height: '100%', position: 'relative', overflow: 'hidden' }}>
+
+      {/* ── Blurred background content ───────────────────── */}
+      <div style={{ filter: 'blur(5px)', pointerEvents: 'none', userSelect: 'none', opacity: 0.55 }}>
+        <PageHead title="Payments" />
+        <div style={{ padding: '8px 16px 100px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Current plan</div>
+                <div className="r-display" style={{ fontSize: 22, color: 'var(--ink)', marginTop: 4 }}>Competitor · Monthly</div>
+              </div>
+              <PaymentPill status="paid" />
+            </div>
+            <div className="r-tabular" style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 8 }}>Renews 1 Jul · €120/mo · 6 lesson credits</div>
+          </div>
+          <div style={{ background: 'var(--ink)', borderRadius: 'var(--r-card)', padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontSize: 12, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Current plan</div>
-              <div className="r-display" style={{ fontSize: 22, color: 'var(--ink)', marginTop: 4 }}>Competitor · Monthly</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: '#fff' }}>Buy a lesson package</div>
+              <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>5 / 10 / 20 credits · save up to 15%</div>
             </div>
-            <PaymentPill status="paid" />
+            <Icon name="chevR" size={20} color="rgba(255,255,255,0.5)" />
           </div>
-          <div className="r-tabular" style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 8 }}>Renews 1 Jul · €120/mo · 6 lesson credits</div>
-        </div>
-        <button onClick={() => { setPaid(false); setSheet(true); }} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', textAlign: 'left', background: 'var(--ink)', color: 'var(--paper)', border: 'none', borderRadius: 'var(--r-card)', padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 600 }}>Buy a lesson package</div>
-            <div style={{ fontSize: 12.5, opacity: 0.7, marginTop: 2 }}>5 / 10 / 20 credits · save up to 15%</div>
+            <SectionLabel>Outstanding</SectionLabel>
+            <ColorBarRow bar="var(--warning)">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>June squad fees</div>
+                  <div className="r-tabular" style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Due 10 Jun · <span className="r-mono">INV-0461</span></div>
+                </div>
+                <span className="r-tabular" style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>€45.00</span>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: '#fff', background: 'var(--brand)', borderRadius: 'var(--r-pill)', padding: '6px 12px' }}>Pay</div>
+              </div>
+            </ColorBarRow>
           </div>
-          <Icon name="chevR" size={20} color="var(--paper)" />
-        </button>
-        <div>
-          <SectionLabel>Outstanding</SectionLabel>
-          <ColorBarRow bar="var(--warning)">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>June squad fees</div>
-                <div className="r-tabular" style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Due 10 Jun · <span className="r-mono">INV-0461</span></div>
-              </div>
-              <span className="r-tabular" style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>€45.00</span>
-              <button onClick={() => { setPaid(false); setSheet(true); }} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: '#fff', background: 'var(--brand)', border: 'none', borderRadius: 'var(--r-pill)', padding: '6px 12px' }}>Pay</button>
+          <div>
+            <SectionLabel>History</SectionLabel>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', overflow: 'hidden' }}>
+              {[['1 Jun', 'Monthly subscription', '€120.00', 'paid'], ['18 May', '10-credit package', '€220.00', 'paid'], ['1 May', 'Monthly subscription', '€120.00', 'paid']].map((r, i, a) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: i < a.length - 1 ? '1px solid var(--hairline)' : 'none' }}>
+                  <span className="r-tabular" style={{ fontSize: 12, color: 'var(--faint)', width: 46 }}>{r[0]}</span>
+                  <span style={{ flex: 1, fontSize: 13.5, color: 'var(--ink)' }}>{r[1]}</span>
+                  <span className="r-tabular" style={{ fontSize: 13, color: 'var(--muted)' }}>{r[2]}</span>
+                  <PaymentPill status={r[3]} size="sm" />
+                </div>
+              ))}
             </div>
-          </ColorBarRow>
-        </div>
-        <div>
-          <SectionLabel>History</SectionLabel>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', overflow: 'hidden' }}>
-            {[['1 Jun', 'Monthly subscription', '€120.00', 'paid'], ['18 May', '10-credit package', '€220.00', 'paid'], ['1 May', 'Monthly subscription', '€120.00', 'paid'], ['22 Apr', 'Drop-in session', '€18.00', 'refunded']].map((r, i, a) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: i < a.length - 1 ? '1px solid var(--hairline)' : 'none' }}>
-                <span className="r-tabular" style={{ fontSize: 12, color: 'var(--faint)', width: 46 }}>{r[0]}</span>
-                <span style={{ flex: 1, fontSize: 13.5, color: 'var(--ink)' }}>{r[1]}</span>
-                <span className="r-tabular" style={{ fontSize: 13, color: 'var(--muted)' }}>{r[2]}</span>
-                <PaymentPill status={r[3]} size="sm" />
-              </div>
-            ))}
           </div>
         </div>
       </div>
-      {sheet && (
-        <BottomSheet onClose={() => setSheet(false)}>
-          <XMoneySheet paid={paid} onPay={() => setPaid(true)} onDone={() => setSheet(false)} />
-        </BottomSheet>
-      )}
+
+      {/* ── Coming soon overlay ──────────────────────────── */}
+      <div style={{
+        position: 'absolute', inset: 0, zIndex: 10,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 28,
+        animation: 'r-rise var(--d-slow) var(--e-enter) 60ms both',
+      }}>
+        <div style={{
+          background: 'rgba(255,255,255,0.82)',
+          backdropFilter: 'blur(28px)',
+          WebkitBackdropFilter: 'blur(28px)',
+          border: '1px solid rgba(255,255,255,0.9)',
+          borderRadius: 24,
+          padding: '32px 28px',
+          textAlign: 'center',
+          boxShadow: '0 12px 48px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.05)',
+          width: '100%',
+          maxWidth: 300,
+        }}>
+          {/* Icon */}
+          <div style={{ width: 56, height: 56, borderRadius: 16, background: 'var(--brand-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <Icon name="card" size={28} color="var(--brand)" strokeWidth={1.6} />
+          </div>
+
+          {/* Badge */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#FEF3C7', borderRadius: 'var(--r-pill)', padding: '4px 11px', marginBottom: 16 }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#F59E0B' }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#92400E', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Coming soon</span>
+          </div>
+
+          <h2 className="r-display" style={{ fontSize: 22, color: 'var(--ink)', margin: '0 0 10px' }}>Payments</h2>
+          <p style={{ fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.55, margin: 0 }}>
+            We're setting up secure payments. Fees, lesson credits, and invoices will all live here.
+          </p>
+        </div>
+      </div>
+
     </div>
   );
 }
