@@ -5,6 +5,7 @@ import { WeaponGlyph } from '../../components/Shared';
 import { BookFlow } from './AthleteBook';
 import { ScheduleScreen, PaymentsScreen, ProgressScreen, CheckinScreen, ColorBarRow } from './AthleteMisc';
 import { ProfileScreen } from './AthleteMisc';
+import { AthleteOnboarding } from './AthleteOnboarding';
 import { getMember, createBooking, upsertMemberFromAuth, getUpcomingBookings } from '../../lib/db';
 import { supabase } from '../../lib/supabase';
 
@@ -212,6 +213,8 @@ function AthleteApp() {
   const [user, setUser] = React.useState(null);
   const [member, setMember] = React.useState(null);
   const [upcomingBookings, setUpcomingBookings] = React.useState([]);
+  // undefined = checking, true = show onboarding, false = show app
+  const [onboarding, setOnboarding] = React.useState(undefined);
 
   React.useEffect(() => {
     let mounted = true;
@@ -219,7 +222,7 @@ function AthleteApp() {
     async function loadFromSession(session) {
       if (!session?.user) return;
       const u = session.user;
-      if (mounted) setUser(u);
+      if (mounted) { setUser(u); setOnboarding(false); }
       try {
         const m = await upsertMemberFromAuth(u);
         if (!mounted) return;
@@ -231,13 +234,23 @@ function AthleteApp() {
       } catch (e) {}
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => loadFromSession(session));
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      if (!session?.user) {
+        setOnboarding(true);
+      } else {
+        loadFromSession(session);
+      }
+    });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         loadFromSession(session);
       } else if (event === 'SIGNED_OUT') {
-        if (mounted) { setUser(null); setMember(null); setMemberId(null); setCredits(0); setUpcomingBookings([]); }
+        if (mounted) {
+          setUser(null); setMember(null); setMemberId(null);
+          setCredits(0); setUpcomingBookings([]); setOnboarding(true);
+        }
       }
     });
 
@@ -280,6 +293,23 @@ function AthleteApp() {
       } catch (e) {}
     }
   };
+
+  // Still checking auth — show minimal loader
+  if (onboarding === undefined) {
+    return (
+      <div style={{ position: 'absolute', inset: 0, background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--brand)', opacity: 0.35, animation: `r-live-pulse 1s ease-in-out ${i * 200}ms infinite` }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (onboarding) {
+    return <AthleteOnboarding onContinue={() => setOnboarding(false)} />;
+  }
 
   const screens = {
     home:     <HomeScreen credits={credits} user={user} member={member} upcomingBookings={upcomingBookings} onBook={() => setBooking(true)} onCheckin={() => setCheckin(true)} onTab={changeTab} onGoProfile={goProfile} />,

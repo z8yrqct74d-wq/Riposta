@@ -7,18 +7,21 @@ export default function AuthCallback() {
   const navigate = useNavigate();
 
   React.useEffect(() => {
-    // Supabase JS v2 automatically exchanges the code in the URL.
-    // We just wait for the session to appear then redirect home.
+    function getReturnUrl() {
+      const stored = sessionStorage.getItem('auth_return');
+      if (stored) { sessionStorage.removeItem('auth_return'); return stored; }
+      return '/';
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
         subscription.unsubscribe();
-        navigate('/', { replace: true });
+        navigate(getReturnUrl(), { replace: true });
       }
     });
 
-    // Also check immediately in case the session is already set
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) navigate('/', { replace: true });
+      if (session) navigate(getReturnUrl(), { replace: true });
     });
 
     return () => subscription.unsubscribe();
