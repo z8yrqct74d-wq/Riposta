@@ -157,3 +157,42 @@ export async function getCoaches() {
   if (error) throw error;
   return data;
 }
+
+// ── Auth helpers ──────────────────────────────────────────────
+
+export async function getMemberByEmail(email) {
+  const { data, error } = await supabase
+    .from('members')
+    .select('*')
+    .ilike('email', email)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function upsertMemberFromAuth(user) {
+  const existing = await getMemberByEmail(user.email);
+  if (existing) return existing;
+  const name = user.user_metadata?.full_name || user.email.split('@')[0];
+  const { data, error } = await supabase
+    .from('members')
+    .insert({ name, email: user.email.toLowerCase(), credits: 0, pay_status: 'paid', visa_status: 'valid' })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getUpcomingBookings(memberId) {
+  const today = new Date().toISOString().split('T')[0];
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('*, coaches(name)')
+    .eq('member_id', memberId)
+    .eq('status', 'booked')
+    .gte('slot_date', today)
+    .order('slot_date', { ascending: true })
+    .order('slot_time', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}

@@ -1,6 +1,10 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { WeaponGlyph, WEAPON_LABEL, Icon, Avatar, PaymentPill, VisaBadge } from '../../components/Shared';
 import { PrimaryBtn, SuccessRing } from './AthleteBook';
+import { QRCodeSVG } from 'qrcode.react';
+import { supabase } from '../../lib/supabase';
+import { cancelBooking, getMember, updateMemberCredits, getBookingsForMember, getNotesForMember } from '../../lib/db';
 
 export function PageHead({ greeting, title }) {
   return (
@@ -44,51 +48,103 @@ export function BottomSheet({ children, onClose }) {
   );
 }
 
-export function ScheduleScreen() {
-  const [items, setItems] = React.useState([
-    { id: 1, kind: 'Lesson', who: 'C. Sandu', weapon: 'sabre', when: 'Today · 18:00', piste: 'Riposte Main Room', bar: 'var(--brand)', window: true },
-    { id: 2, kind: 'Group',  who: 'Sabre squad', weapon: 'sabre', when: 'Fri 6 · 17:30', piste: 'Riposte Main Room', bar: 'var(--steel)', window: true },
-    { id: 3, kind: 'Lesson', who: 'L. Dina', weapon: 'sabre', when: 'Sat 7 · 11:30', piste: 'Riposte Main Room', bar: 'var(--brand)', window: false },
-  ]);
-  const [confirm, setConfirm] = React.useState(null);
+function coachShort(id) {
+  const MAP = { sandu: 'C. Sandu', dina: 'L. Dina' };
+  return MAP[id] || id;
+}
 
-  const item = items.find(i => i.id === confirm);
+function bookingDayLabel(b) {
+  if (!b?.slot_date) return 'Today';
+  const today = new Date().toISOString().split('T')[0];
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const DOWS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const d = new Date(b.slot_date + 'T12:00:00');
+  if (b.slot_date === today) return 'Today';
+  if (b.slot_date === tomorrow) return 'Fri ' + d.getDate();
+  return `${DOWS[d.getDay()]} ${d.getDate()}`;
+}
+
+function canRefundBooking(b) {
+  if (!b?.slot_date || !b?.slot_time) return true;
+  const [h, m] = b.slot_time.split(':').map(Number);
+  const target = new Date(b.slot_date + 'T00:00:00');
+  target.setHours(h, m, 0, 0);
+  return target - new Date() > 12 * 3600 * 1000;
+}
+
+export function ScheduleScreen({ memberId, bookings: initialBookings, onRefresh }) {
+  const [items, setItems] = React.useState(initialBookings || []);
+  const [confirm, setConfirm] = React.useState(null);
+  const [cancelling, setCancelling] = React.useState(false);
+
+  React.useEffect(() => {
+    setItems(initialBookings || []);
+  }, [initialBookings]);
+
+  const item = items.find(b => b.id === confirm);
+  const itemCanRefund = item ? canRefundBooking(item) : false;
+
+  const handleCancel = async () => {
+    if (!item) return;
+    setCancelling(true);
+    try {
+      await cancelBooking(item.id);
+      if (itemCanRefund && memberId) {
+        const m = await getMember(memberId);
+        if (m) await updateMemberCredits(memberId, (m.credits || 0) + 1);
+      }
+      setItems(prev => prev.filter(x => x.id !== item.id));
+      onRefresh && onRefresh();
+    } catch (e) {}
+    setCancelling(false);
+    setConfirm(null);
+  };
+
   return (
     <div style={{ height: '100%', position: 'relative' }}>
       <PageHead title="Schedule" />
       <div className="r-scroll" style={{ overflowY: 'auto', height: 'calc(100% - 96px)', padding: '8px 16px 100px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {items.map((it, i) => (
-          <div key={it.id} style={{ animation: `r-rise var(--d-base) var(--e-enter) ${i*40}ms both` }}>
-            <ColorBarRow bar={it.bar}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <WeaponGlyph type={it.weapon} size={22} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>{it.who}</span>
-                    <span style={{ fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--faint)' }}>{it.kind}</span>
-                  </div>
-                  <div className="r-tabular" style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>{it.when} · {it.piste}</div>
-                </div>
-                <button onClick={() => setConfirm(it.id)} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--muted)', background: 'transparent', border: '1px solid var(--hairline)', borderRadius: 'var(--r-pill)', padding: '5px 11px' }}>Cancel</button>
-              </div>
-            </ColorBarRow>
+        {items.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--muted)' }}>
+            <div className="r-display" style={{ fontSize: 20, color: 'var(--ink)', marginBottom: 6 }}>Nothing scheduled.</div>
+            <div style={{ fontSize: 13.5 }}>Book a lesson from the home screen.</div>
           </div>
-        ))}
+        ) : items.map((b, i) => {
+          const when = `${bookingDayLabel(b)} · ${b.slot_time}`;
+          const displayName = b.coaches?.name ? coachShort(b.coach_id) : coachShort(b.coach_id);
+          return (
+            <div key={b.id} style={{ animation: `r-rise var(--d-base) var(--e-enter) ${i * 40}ms both` }}>
+              <ColorBarRow bar="var(--brand)">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <WeaponGlyph type={b.weapon || 'sabre'} size={22} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>{displayName}</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--faint)' }}>Lesson</span>
+                    </div>
+                    <div className="r-tabular" style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>{when} · {b.piste || 'Riposte Main Room'}</div>
+                  </div>
+                  <button onClick={() => setConfirm(b.id)} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--muted)', background: 'transparent', border: '1px solid var(--hairline)', borderRadius: 'var(--r-pill)', padding: '5px 11px' }}>Cancel</button>
+                </div>
+              </ColorBarRow>
+            </div>
+          );
+        })}
       </div>
       {item && (
         <BottomSheet onClose={() => setConfirm(null)}>
           <div style={{ padding: '8px 20px 30px' }}>
             <h2 className="r-display" style={{ fontSize: 22, color: 'var(--ink)', margin: '0 0 8px' }}>Cancel this lesson?</h2>
             <p style={{ fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.5, margin: '0 0 18px' }}>
-              {item.who} · {item.when}.{' '}
-              {item.window
+              {coachShort(item.coach_id)} · {bookingDayLabel(item)} at {item.slot_time}.{' '}
+              {itemCanRefund
                 ? <>You're outside the 12-hour window, so your <strong style={{ color: 'var(--success)' }}>credit will be refunded</strong>.</>
                 : <>You're inside the 12-hour window, so this <strong style={{ color: 'var(--danger)' }}>credit will be forfeited</strong>.</>}
             </p>
-            <button onClick={() => { setItems(items.filter(x => x.id !== item.id)); setConfirm(null); }} className="r-focusable" style={{
-              width: '100%', padding: 14, borderRadius: 'var(--r-btn)', cursor: 'pointer', font: 'inherit', fontSize: 15, fontWeight: 600,
+            <button onClick={handleCancel} disabled={cancelling} className="r-focusable" style={{
+              width: '100%', padding: 14, borderRadius: 'var(--r-btn)', cursor: cancelling ? 'default' : 'pointer', font: 'inherit', fontSize: 15, fontWeight: 600,
               marginBottom: 8, background: 'transparent', color: 'var(--brand)', border: '1px solid var(--brand)',
-            }}>{item.window ? 'Cancel & refund credit' : 'Cancel & forfeit credit'}</button>
+            }}>{cancelling ? 'Cancelling…' : itemCanRefund ? 'Cancel & refund credit' : 'Cancel & forfeit credit'}</button>
             <button onClick={() => setConfirm(null)} className="r-focusable" style={{ width: '100%', padding: 14, borderRadius: 'var(--r-btn)', cursor: 'pointer', font: 'inherit', fontSize: 15, fontWeight: 600, background: 'var(--ink)', color: 'var(--paper)', border: 'none' }}>Keep lesson</button>
           </div>
         </BottomSheet>
@@ -167,8 +223,8 @@ export function PaymentsScreen() {
         <div>
           <SectionLabel>History</SectionLabel>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', overflow: 'hidden' }}>
-            {[['1 Jun','Monthly subscription','€120.00','paid'],['18 May','10-credit package','€220.00','paid'],['1 May','Monthly subscription','€120.00','paid'],['22 Apr','Drop-in session','€18.00','refunded']].map((r, i, a) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: i < a.length-1 ? '1px solid var(--hairline)' : 'none' }}>
+            {[['1 Jun', 'Monthly subscription', '€120.00', 'paid'], ['18 May', '10-credit package', '€220.00', 'paid'], ['1 May', 'Monthly subscription', '€120.00', 'paid'], ['22 Apr', 'Drop-in session', '€18.00', 'refunded']].map((r, i, a) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: i < a.length - 1 ? '1px solid var(--hairline)' : 'none' }}>
                 <span className="r-tabular" style={{ fontSize: 12, color: 'var(--faint)', width: 46 }}>{r[0]}</span>
                 <span style={{ flex: 1, fontSize: 13.5, color: 'var(--ink)' }}>{r[1]}</span>
                 <span className="r-tabular" style={{ fontSize: 13, color: 'var(--muted)' }}>{r[2]}</span>
@@ -187,23 +243,57 @@ export function PaymentsScreen() {
   );
 }
 
-const ATT_HISTORY = [
-  { w: 'W1', att: true }, { w: 'W2', att: true }, { w: 'W3', att: false },
-  { w: 'W4', att: true }, { w: 'W5', att: true }, { w: 'W6', att: true },
-  { w: 'W7', att: true }, { w: 'W8', att: false },{ w: 'W9', att: true },
-  { w: 'W10', att: true },{ w: 'W11', att: true },{ w: 'W12', att: true },
-];
+function buildAttHistory(allBookings) {
+  const now = new Date();
+  const result = [];
+  for (let w = 11; w >= 0; w--) {
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay() + 1 - w * 7);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+    const att = (allBookings || []).some(b => {
+      if (!b.slot_date || b.status === 'cancelled') return false;
+      const d = new Date(b.slot_date + 'T12:00:00');
+      return d >= weekStart && d <= weekEnd;
+    });
+    result.push({ w: `W${12 - w}`, att });
+  }
+  return result;
+}
 
-export function ProgressScreen() {
-  const [weapon, setWeapon] = React.useState('sabre');
-  const attended = ATT_HISTORY.filter(w => w.att).length;
-  const rate = Math.round(attended / ATT_HISTORY.length * 100);
+export function ProgressScreen({ memberId }) {
+  const [notes, setNotes] = React.useState([]);
+  const [attHistory, setAttHistory] = React.useState(() => Array.from({ length: 12 }, (_, i) => ({ w: `W${i + 1}`, att: false })));
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!memberId) return;
+    setLoading(true);
+    Promise.all([
+      getBookingsForMember(memberId),
+      getNotesForMember(memberId),
+    ]).then(([bookings, fetchedNotes]) => {
+      setAttHistory(buildAttHistory(bookings));
+      setNotes(fetchedNotes || []);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, [memberId]);
+
+  const attended = attHistory.filter(w => w.att).length;
+  const rate = attHistory.length > 0 ? Math.round(attended / attHistory.length * 100) : 0;
+  let streak = 0;
+  for (let i = attHistory.length - 1; i >= 0; i--) {
+    if (attHistory[i].att) streak++;
+    else break;
+  }
+
   return (
     <div style={{ height: '100%' }}>
       <PageHead title="Progress" />
       <div className="r-scroll" style={{ overflowY: 'auto', height: 'calc(100% - 96px)', padding: '8px 16px 100px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'flex', gap: 10 }}>
-          {[['Attendance', rate + '%', 'var(--success)'], ['Sessions', attended, 'var(--ink)'], ['Streak', '4 wks', 'var(--steel)']].map((s, i) => (
+          {[['Attendance', rate + '%', 'var(--success)'], ['Sessions', attended, 'var(--ink)'], ['Streak', streak > 0 ? `${streak} wk${streak > 1 ? 's' : ''}` : '—', 'var(--steel)']].map((s, i) => (
             <div key={i} style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: '14px 12px', textAlign: 'center' }}>
               <div className="r-display r-tabular" style={{ fontSize: 26, color: s[2] }}>{s[1]}</div>
               <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 2 }}>{s[0]}</div>
@@ -213,14 +303,9 @@ export function ProgressScreen() {
         <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Last 12 weeks</div>
           <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end' }}>
-            {ATT_HISTORY.map((w, i) => (
+            {attHistory.map((w, i) => (
               <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <div style={{
-                  width: '100%', height: 28, borderRadius: 4,
-                  background: w.att ? 'var(--brand)' : 'var(--hairline)',
-                  opacity: w.att ? 1 : 0.5,
-                  transition: 'background var(--d-base)',
-                }} />
+                <div style={{ width: '100%', height: 28, borderRadius: 4, background: w.att ? 'var(--brand)' : 'var(--hairline)', opacity: w.att ? 1 : 0.5, transition: 'background var(--d-base)' }} />
                 <span style={{ fontSize: 9, color: 'var(--faint)', whiteSpace: 'nowrap' }}>{w.w}</span>
               </div>
             ))}
@@ -230,31 +315,36 @@ export function ProgressScreen() {
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--muted)' }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--hairline)', display: 'inline-block' }} /> Absent</span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-pill)', padding: 4 }}>
-          {['sabre'].map(w => (
-            <button key={w} onClick={() => setWeapon(w)} className="r-focusable" style={{ flex: 1, font: 'inherit', cursor: 'pointer', border: 'none', borderRadius: 'var(--r-pill)', padding: '8px', background: 'var(--ink)', color: 'var(--paper)', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <WeaponGlyph type={w} size={16} color="var(--paper)" /> {WEAPON_LABEL[w]}
-            </button>
-          ))}
-        </div>
         <div>
           <SectionLabel>Coach notes</SectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[
-              { d: '3 Jun', coach: 'C. Sandu', focus: 'Distance control in the lunge', note: 'Strong tempo. Worked on holding distance before committing — keep the back foot loaded. Homework: shadow footwork, 10 min ×3 this week.' },
-              { d: '28 May', coach: 'C. Sandu', focus: 'Parry-riposte timing', note: 'Quick hands, but riposte arrives early. Wait for the blade. Improved disengage on the second intention.' },
-              { d: '22 May', coach: 'L. Dina', focus: 'Advance-lunge cadence', note: 'Footwork session. Cadence much cleaner. Needs more extension at end of lunge. Extension drills daily.' },
-            ].map((n, i) => (
-              <div key={i} style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 14, animation: `r-rise var(--d-base) var(--e-enter) ${i*40}ms both` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                  <Icon name="sparkle" size={13} color="var(--steel)" />
-                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--steel)' }}>Focus</span>
-                  <span style={{ fontSize: 11.5, color: 'var(--faint)', marginLeft: 'auto' }}>{n.coach} · {n.d}</span>
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>{n.focus}</div>
-                <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, margin: 0 }}>{n.note}</p>
+            {notes.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px 16px', fontSize: 13.5, color: 'var(--muted)' }}>
+                No notes yet. Notes appear here after each lesson.
               </div>
-            ))}
+            ) : notes.map((n, i) => {
+              const dateStr = new Date(n.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+              const coachLabel = coachShort(n.coach_id);
+              return (
+                <div key={n.id} style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 14, animation: `r-rise var(--d-base) var(--e-enter) ${i * 40}ms both` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <Icon name="sparkle" size={13} color="var(--steel)" />
+                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--steel)' }}>Focus</span>
+                    <span style={{ fontSize: 11.5, color: 'var(--faint)', marginLeft: 'auto' }}>{coachLabel} · {dateStr}</span>
+                  </div>
+                  {n.tidied_focus ? (
+                    <>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>{n.tidied_focus}</div>
+                      <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, margin: 0 }}>
+                        {[n.tidied_improved, n.tidied_homework].filter(Boolean).join(' ')}
+                      </p>
+                    </>
+                  ) : (
+                    <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, margin: 0 }}>{n.raw_note}</p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -262,32 +352,14 @@ export function ProgressScreen() {
   );
 }
 
-function QRBlock() {
-  const cells = [];
-  const seed = (x, y) => ((x*73 + y*131 + x*y*17) % 7) > 2;
-  const N = 21;
-  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-    let on = false;
-    [[0,0],[N-7,0],[0,N-7]].forEach(([a,b]) => {
-      if (x>=a&&x<a+7&&y>=b&&y<b+7) {
-        const rx=x-a, ry=y-b;
-        if ((rx===0||rx===6||ry===0||ry===6)||(rx>=2&&rx<=4&&ry>=2&&ry<=4)) on=true;
-      }
-    });
-    if (!([[0,0],[N-7,0],[0,N-7]].some(([a,b]) => x>=a&&x<a+7&&y>=b&&y<b+7))) {
-      on = seed(x,y);
-    }
-    cells.push(on);
-  }
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${N}, 1fr)`, width: 200, height: 200, gap: 0 }}>
-      {cells.map((c, i) => <div key={i} style={{ background: c ? '#17150F' : 'transparent' }} />)}
-    </div>
-  );
-}
-
-export function CheckinScreen() {
+export function CheckinScreen({ member }) {
   const [scanned, setScanned] = React.useState(false);
+  const qrValue = `RIPOSTE:${member?.id || 'GUEST'}`;
+  const displayName = member?.name || 'Guest';
+  const shortCode = member?.id
+    ? `${displayName.split(' ')[0].toUpperCase()}·${member.id.slice(0, 6).toUpperCase()}`
+    : 'GUEST·DEMO';
+
   return (
     <div style={{ height: '100%', background: 'var(--ink)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, position: 'relative' }}>
       <div style={{ position: 'absolute', top: 60, left: 0, right: 0, textAlign: 'center', color: 'var(--paper)' }}>
@@ -296,14 +368,16 @@ export function CheckinScreen() {
       </div>
       {!scanned ? (
         <div style={{ background: '#fff', borderRadius: 20, padding: 22, boxShadow: '0 20px 50px rgba(0,0,0,0.4)', animation: 'r-rise var(--d-slow) var(--e-enter) both' }}>
-          <QRBlock />
-          <div className="r-mono" style={{ textAlign: 'center', fontSize: 13, color: '#17150F', marginTop: 14, letterSpacing: '0.06em' }}>MAYA·R·7F2K9</div>
+          <QRCodeSVG value={qrValue} size={200} />
+          <div className="r-mono" style={{ textAlign: 'center', fontSize: 13, color: '#17150F', marginTop: 14, letterSpacing: '0.06em' }}>{shortCode}</div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <SuccessRing size={120} />
-          <div className="r-display" style={{ fontSize: 28, color: 'var(--paper)', marginTop: 22, animation: 'r-rise var(--d-base) var(--e-enter) 400ms both' }}>Maya Rocha</div>
-          <div style={{ fontSize: 14, color: 'var(--success)', marginTop: 4, animation: 'r-rise var(--d-base) var(--e-enter) 500ms both' }}>Checked in · 17:54</div>
+          <div className="r-display" style={{ fontSize: 28, color: 'var(--paper)', marginTop: 22, animation: 'r-rise var(--d-base) var(--e-enter) 400ms both' }}>{displayName}</div>
+          <div style={{ fontSize: 14, color: 'var(--success)', marginTop: 4, animation: 'r-rise var(--d-base) var(--e-enter) 500ms both' }}>
+            Checked in · {new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+          </div>
         </div>
       )}
       <button onClick={() => setScanned(s => !s)} className="r-focusable" style={{ position: 'absolute', bottom: 40, font: 'inherit', cursor: 'pointer', fontSize: 12.5, color: 'rgba(255,255,255,0.5)', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 'var(--r-pill)', padding: '8px 16px' }}>
@@ -346,7 +420,8 @@ function ProfileSection({ title, children, highlight, sectionRef }) {
   );
 }
 
-export function ProfileScreen({ focusSection }) {
+export function ProfileScreen({ user, member, focusSection }) {
+  const navigate = useNavigate();
   const compRef = React.useRef(null);
   const scrollRef = React.useRef(null);
 
@@ -359,14 +434,33 @@ export function ProfileScreen({ focusSection }) {
     }
   }, [focusSection]);
 
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    navigate('/');
+  };
+
+  const displayName = user?.user_metadata?.full_name || member?.name || 'Guest';
+  const email = user?.email || member?.email || '';
+  const avatarUrl = user?.user_metadata?.avatar_url;
+  const weaponLabel = member?.weapon
+    ? member.weapon.charAt(0).toUpperCase() + member.weapon.slice(1)
+    : null;
+  const memberSince = member?.created_at
+    ? new Date(member.created_at).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+    : '—';
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '52px 20px 16px', borderBottom: '1px solid var(--hairline)', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
-        <Avatar name="Maya Rocha" size={60} />
+        {avatarUrl
+          ? <img src={avatarUrl} alt="" style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+          : <Avatar name={displayName} size={60} />}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', fontFamily: 'var(--font-display)' }}>Maya Rocha</div>
-          <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>Sabre · U17</div>
-          <div className="r-mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3, letterSpacing: '0.04em' }}>MBR-20831</div>
+          <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', fontFamily: 'var(--font-display)' }}>{displayName}</div>
+          <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
+            {weaponLabel && member?.category ? `${weaponLabel} · ${member.category}` : weaponLabel || member?.category || 'Member'}
+          </div>
+          {member?.id && <div className="r-mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3, letterSpacing: '0.04em' }}>MBR-{member.id.slice(0, 5).toUpperCase()}</div>}
         </div>
         <button className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: '1px solid var(--hairline)', background: 'transparent', borderRadius: 'var(--r-btn)', padding: '6px 12px', fontSize: 13, fontWeight: 600, color: 'var(--muted)', flexShrink: 0 }}>Edit</button>
       </div>
@@ -378,19 +472,25 @@ export function ProfileScreen({ focusSection }) {
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>Medical certificate</div>
-                  <div className="r-tabular" style={{ fontSize: 12.5, color: 'var(--muted)' }}>Expires 14 Jun 2026 · 9 days left</div>
+                  <div className="r-tabular" style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+                    {member?.visa_status === 'expiring' ? 'Expires soon — upload renewal' :
+                     member?.visa_status === 'expired' ? 'Expired — action required' :
+                     'Valid'}
+                  </div>
                 </div>
-                <VisaBadge status="expiring" />
+                <VisaBadge status={member?.visa_status || 'valid'} />
               </div>
-              <button className="r-focusable" style={{ marginTop: 12, font: 'inherit', cursor: 'pointer', width: '100%', padding: '9px', borderRadius: 'var(--r-btn)', border: '1px solid var(--warning)', background: 'var(--warning-tint)', color: 'var(--warning)', fontSize: 13, fontWeight: 600 }}>
-                Upload renewal
-              </button>
+              {(member?.visa_status === 'expiring' || member?.visa_status === 'expired') && (
+                <button className="r-focusable" style={{ marginTop: 12, font: 'inherit', cursor: 'pointer', width: '100%', padding: '9px', borderRadius: 'var(--r-btn)', border: '1px solid var(--warning)', background: 'var(--warning-tint)', color: 'var(--warning)', fontSize: 13, fontWeight: 600 }}>
+                  Upload renewal
+                </button>
+              )}
             </div>
             <div style={{ padding: 14 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>Federation licence</div>
-                  <div className="r-mono" style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 2 }}>FIE-ROU-20831</div>
+                  {member?.id && <div className="r-mono" style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 2 }}>FIE-ROU-{member.id.slice(0, 5).toUpperCase()}</div>}
                   <div className="r-tabular" style={{ fontSize: 12.5, color: 'var(--muted)' }}>Expires 31 Dec 2026</div>
                 </div>
                 <VisaBadge status="valid" />
@@ -400,21 +500,25 @@ export function ProfileScreen({ focusSection }) {
         </div>
 
         <ProfileSection title="Club membership">
-          <ProfileRow label="Plan"          value="Competitor · Monthly" />
-          <ProfileRow label="Weapon"        value={<span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><WeaponGlyph type="sabre" size={16} /> Sabre</span>} />
-          <ProfileRow label="Category"      value="U17" />
-          <ProfileRow label="Member since"  value="Sep 2023" last />
+          <ProfileRow label="Plan" value={member?.plan_name || '—'} />
+          <ProfileRow label="Weapon" value={weaponLabel
+            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><WeaponGlyph type={member.weapon} size={16} /> {weaponLabel}</span>
+            : '—'} />
+          <ProfileRow label="Category" value={member?.category || '—'} />
+          <ProfileRow label="Member since" value={memberSince} last />
         </ProfileSection>
 
         <ProfileSection title="Personal">
-          <ProfileRow icon="user"    label="Date of birth"     value="12 Mar 2009" />
-          <ProfileRow icon="message" label="Email"             value="maya@email.com" />
-          <ProfileRow icon="bell"    label="Emergency contact" value="Ana Rocha" onTap={() => {}} last />
+          <ProfileRow icon="user" label="Date of birth" value="—" />
+          <ProfileRow icon="message" label="Email" value={email || '—'} />
+          <ProfileRow icon="bell" label="Emergency contact" value="—" onTap={() => {}} last />
         </ProfileSection>
 
         <ProfileSection title="Account">
-          <ProfileRow icon="bell"    label="Notifications"  value="On"  onTap={() => {}} />
-          <ProfileRow icon="lock"    label="Sign out"       value=""    accent="var(--brand)" onTap={() => {}} last />
+          <ProfileRow icon="bell" label="Notifications" value="On" onTap={() => {}} />
+          {user
+            ? <ProfileRow icon="lock" label="Sign out" value="" accent="var(--brand)" onTap={signOut} last />
+            : <ProfileRow icon="lock" label="Sign in" value="" accent="var(--brand)" onTap={() => navigate('/auth')} last />}
         </ProfileSection>
       </div>
     </div>

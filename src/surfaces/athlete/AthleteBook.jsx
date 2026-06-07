@@ -1,34 +1,95 @@
 import React from 'react';
 import { WeaponGlyph, Icon, Avatar } from '../../components/Shared';
+import { getCoaches } from '../../lib/db';
 
-export const COACHES = [
-  { id: 'sandu', name: 'Constantin Sandu', short: 'C. Sandu', weapons: ['sabre'], maitre: false, blurb: 'Sabre · technique', next: 'Today 18:00' },
-  { id: 'dina', name: 'Lucian Dina', short: 'L. Dina', weapons: ['sabre'], maitre: false, blurb: 'Sabre · footwork & tactics', next: 'Today 19:30' },
-];
-
-export const DAYS = [
-  { id: 'd0', dow: 'Thu', dom: '5', label: 'Today' },
-  { id: 'd1', dow: 'Fri', dom: '6' },
-  { id: 'd2', dow: 'Sat', dom: '7' },
-  { id: 'd3', dow: 'Mon', dom: '9' },
-  { id: 'd4', dow: 'Tue', dom: '10' },
-];
-
-export const SLOTS = {
-  'sandu|d0': [{ t: '18:00', piste: 'Riposte Main Room' }, { t: '18:45', piste: 'Riposte Main Room' }],
-  'sandu|d1': [{ t: '17:00', piste: 'Riposte Main Room' }, { t: '17:45', piste: 'Riposte Main Room' }],
-  'sandu|d2': [{ t: '10:00', piste: 'Riposte Main Room' }, { t: '10:45', piste: 'Riposte Main Room' }],
-  'sandu|d3': [{ t: '18:00', piste: 'Riposte Main Room' }],
-  'dina|d0': [{ t: '19:30', piste: 'Riposte Main Room' }],
-  'dina|d1': [{ t: '17:00', piste: 'Riposte Main Room' }, { t: '17:45', piste: 'Riposte Main Room' }],
-  'dina|d2': [{ t: '11:30', piste: 'Riposte Main Room' }, { t: '12:15', piste: 'Riposte Main Room' }],
-  'dina|d4': [{ t: '18:30', piste: 'Riposte Main Room' }],
+// Weekly availability by day-of-week (1=Mon … 6=Sat, 0=Sun skipped)
+const COACH_SCHEDULE = {
+  sandu: {
+    1: [{ t: '18:00', piste: 'Riposte Main Room' }, { t: '18:45', piste: 'Riposte Main Room' }],
+    4: [{ t: '18:00', piste: 'Riposte Main Room' }, { t: '18:45', piste: 'Riposte Main Room' }],
+    5: [{ t: '17:00', piste: 'Riposte Main Room' }, { t: '17:45', piste: 'Riposte Main Room' }],
+    6: [{ t: '10:00', piste: 'Riposte Main Room' }, { t: '10:45', piste: 'Riposte Main Room' }],
+  },
+  dina: {
+    2: [{ t: '18:30', piste: 'Riposte Main Room' }],
+    4: [{ t: '19:30', piste: 'Riposte Main Room' }],
+    5: [{ t: '17:00', piste: 'Riposte Main Room' }, { t: '17:45', piste: 'Riposte Main Room' }],
+    6: [{ t: '11:30', piste: 'Riposte Main Room' }, { t: '12:15', piste: 'Riposte Main Room' }],
+  },
 };
+
+function buildDays() {
+  const DOWS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const today = new Date();
+  const days = [];
+  let offset = 0;
+  while (days.length < 7) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + offset);
+    if (d.getDay() !== 0) {
+      days.push({
+        id: `d${offset}`,
+        dow: DOWS[d.getDay()],
+        dom: String(d.getDate()),
+        label: offset === 0 ? 'Today' : undefined,
+        date: d.toISOString().split('T')[0],
+        dayOfWeek: d.getDay(),
+      });
+    }
+    offset++;
+  }
+  return days;
+}
+
+function coachShort(name) {
+  const parts = (name || '').trim().split(/\s+/);
+  return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(' ')}` : name;
+}
+
+function mapDbCoach(c, days) {
+  const sched = COACH_SCHEDULE[c.id] || {};
+  const nextDay = days.find(d => (sched[d.dayOfWeek] || []).length > 0);
+  const nextSlot = nextDay ? (sched[nextDay.dayOfWeek] || [])[0] : null;
+  const nextLabel = nextDay && nextSlot
+    ? `${nextDay.label || nextDay.dow + ' ' + nextDay.dom} ${nextSlot.t}`
+    : '';
+  return {
+    id: c.id,
+    name: c.name,
+    short: coachShort(c.name),
+    weapons: c.weapon ? [c.weapon] : ['sabre'],
+    maitre: c.maitre || false,
+    blurb: c.blurb || '',
+    next: nextLabel,
+  };
+}
+
+function buildSlots(coachIds, days) {
+  const s = {};
+  for (const id of coachIds) {
+    const sched = COACH_SCHEDULE[id] || {};
+    for (const day of days) {
+      const daySlots = sched[day.dayOfWeek] || [];
+      if (daySlots.length) s[`${id}|${day.id}`] = daySlots;
+    }
+  }
+  return s;
+}
+
+const FALLBACK_RAW = [
+  { id: 'sandu', name: 'Constantin Sandu', weapon: 'sabre', maitre: true, blurb: 'Sabre · technique' },
+  { id: 'dina', name: 'Lucian Dina', weapon: 'sabre', maitre: false, blurb: 'Sabre · footwork & tactics' },
+];
+
+// Computed once at module load so DAYS reflect "today" at page-load time
+const DAYS_STATIC = buildDays();
+const FALLBACK_COACHES = FALLBACK_RAW.map(c => mapDbCoach(c, DAYS_STATIC));
+const FALLBACK_SLOTS = buildSlots(FALLBACK_RAW.map(c => c.id), DAYS_STATIC);
 
 export function StepDots({ step }) {
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-      {[0,1,2].map(i => (
+      {[0, 1, 2].map(i => (
         <div key={i} style={{ height: 4, borderRadius: 2, transition: 'all var(--d-base) var(--e-standard)', width: i === step ? 20 : 6, background: i <= step ? 'var(--brand)' : 'var(--hairline)' }} />
       ))}
     </div>
@@ -78,8 +139,8 @@ export function SuccessRing({ size = 96 }) {
   return (
     <div style={{ width: size, height: size, position: 'relative' }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--success-tint)" strokeWidth="4" />
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--success)" strokeWidth="4" strokeLinecap="round" strokeDasharray={c} style={{ strokeDashoffset: c, animation: 'r-ring-draw 360ms var(--e-standard) 120ms forwards' }} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--success-tint)" strokeWidth="4" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--success)" strokeWidth="4" strokeLinecap="round" strokeDasharray={c} style={{ strokeDashoffset: c, animation: 'r-ring-draw 360ms var(--e-standard) 120ms forwards' }} />
       </svg>
       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'r-pop 320ms var(--e-spring) 360ms both' }}>
         <Icon name="check" size={40} color="var(--success)" strokeWidth={2.4} />
@@ -113,16 +174,26 @@ function FlowFooter({ children }) {
 
 export function BookFlow({ credits, onClose, onBooked }) {
   const [step, setStep] = React.useState(0);
+  const [coaches, setCoaches] = React.useState(FALLBACK_COACHES);
+  const [slots, setSlots] = React.useState(FALLBACK_SLOTS);
   const [coachId, setCoachId] = React.useState(null);
-  const [dayId, setDayId] = React.useState('d0');
+  const [dayId, setDayId] = React.useState(DAYS_STATIC[0]?.id || 'd0');
   const [slotIdx, setSlotIdx] = React.useState(null);
   const [confirming, setConfirming] = React.useState(false);
   const [showMinus, setShowMinus] = React.useState(false);
   const [rolled, setRolled] = React.useState(false);
 
-  const coach = COACHES.find(c => c.id === coachId);
-  const daySlots = SLOTS[`${coachId}|${dayId}`] || [];
-  const day = DAYS.find(d => d.id === dayId);
+  React.useEffect(() => {
+    getCoaches().then(data => {
+      if (!data?.length) return;
+      setCoaches(data.map(c => mapDbCoach(c, DAYS_STATIC)));
+      setSlots(buildSlots(data.map(c => c.id), DAYS_STATIC));
+    }).catch(() => {});
+  }, []);
+
+  const coach = coaches.find(c => c.id === coachId);
+  const daySlots = slots[`${coachId}|${dayId}`] || [];
+  const day = DAYS_STATIC.find(d => d.id === dayId);
   const slot = slotIdx != null ? daySlots[slotIdx] : null;
 
   const go = (s) => setStep(s);
@@ -131,7 +202,17 @@ export function BookFlow({ credits, onClose, onBooked }) {
     setConfirming(true);
     setTimeout(() => setShowMinus(true), 120);
     setTimeout(() => setRolled(true), 360);
-    setTimeout(() => { onBooked && onBooked(); go(3); }, 900);
+    setTimeout(() => {
+      onBooked && onBooked({
+        coachId,
+        coachName: coach?.name,
+        date: day?.date,
+        time: slot?.t,
+        piste: slot?.piste,
+        weapon: coach?.weapons?.[0] || 'sabre',
+      });
+      go(3);
+    }, 900);
   };
 
   const headers = ['Pick a coach', 'Choose a time', 'Confirm', ''];
@@ -158,7 +239,7 @@ export function BookFlow({ credits, onClose, onBooked }) {
         <div style={{ display: 'flex', height: '100%', width: '400%', transform: `translateX(-${step * 25}%)`, transition: 'transform var(--d-slow) var(--e-standard)' }}>
           <div className="r-scroll" style={{ width: '25%', overflowY: 'auto', padding: '4px 16px 24px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {COACHES.map((c, i) => (
+              {coaches.map((c, i) => (
                 <CoachCard key={c.id} coach={c} index={i} selected={coachId === c.id} onPick={() => { setCoachId(c.id); setSlotIdx(null); setTimeout(() => go(1), 160); }} />
               ))}
             </div>
@@ -173,8 +254,8 @@ export function BookFlow({ credits, onClose, onBooked }) {
               </div>
             )}
             <div className="r-scroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, marginBottom: 18 }}>
-              {DAYS.map(d => {
-                const has = (SLOTS[`${coachId}|${d.id}`] || []).length > 0;
+              {DAYS_STATIC.map(d => {
+                const has = (slots[`${coachId}|${d.id}`] || []).length > 0;
                 const sel = dayId === d.id;
                 return (
                   <button key={d.id} disabled={!has} onClick={() => { setDayId(d.id); setSlotIdx(null); }} className="r-focusable r-tabular" style={{ flexShrink: 0, width: 52, padding: '8px 0', cursor: has ? 'pointer' : 'default', background: sel ? 'var(--ink)' : 'var(--surface)', font: 'inherit', border: `1px solid ${sel ? 'var(--ink)' : 'var(--hairline)'}`, borderRadius: 'var(--r-btn)', opacity: has ? 1 : 0.4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
@@ -205,8 +286,8 @@ export function BookFlow({ credits, onClose, onBooked }) {
             {coach && slot && (
               <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', overflow: 'hidden' }}>
                 <SummaryRow label="Coach" value={coach.short} extra={coach.maitre && <MaitrePill />} />
-                <SummaryRow label="Weapon" value={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><WeaponGlyph type="sabre" size={18} /> Sabre</span>} />
-                <SummaryRow label="When" value={`${day?.label || day?.dow+' '+day?.dom} · ${slot.t}`} />
+                <SummaryRow label="Weapon" value={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><WeaponGlyph type={coach.weapons[0] || 'sabre'} size={18} /> {(coach.weapons[0] || 'sabre').charAt(0).toUpperCase() + (coach.weapons[0] || 'sabre').slice(1)}</span>} />
+                <SummaryRow label="When" value={`${day?.label || day?.dow + ' ' + day?.dom} · ${slot.t}`} />
                 <SummaryRow label="Piste" value={slot.piste} />
                 <SummaryRow label="Length" value="45 min" />
                 <SummaryRow label="Cost" value={<span style={{ color: 'var(--brand)', fontWeight: 600 }}>1 credit</span>} last />
@@ -245,7 +326,7 @@ export function BookFlow({ credits, onClose, onBooked }) {
           <div style={{ textAlign: 'center', maxWidth: 270, marginTop: 22 }}>
             <h1 className="r-display" style={{ fontSize: 30, color: 'var(--ink)', margin: 0, animation: 'r-rise var(--d-base) var(--e-enter) 360ms both' }}>You're booked.</h1>
             <p style={{ fontSize: 14, color: 'var(--muted)', margin: '10px 0 0', lineHeight: 1.5, animation: 'r-rise var(--d-base) var(--e-enter) 440ms both' }}>
-              {coach.short} · {day?.label || day?.dow+' '+day?.dom} at {slot.t}, {slot.piste}. We'll remind you an hour before.
+              {coach.short} · {day?.label || day?.dow + ' ' + day?.dom} at {slot.t}, {slot.piste}. We'll remind you an hour before.
             </p>
           </div>
           <div style={{ marginTop: 28, display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 280, animation: 'r-rise var(--d-base) var(--e-enter) 520ms both' }}>
