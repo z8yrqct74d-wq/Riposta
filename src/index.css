@@ -1,0 +1,9 @@
+html, body { margin: 0; min-height: 100%; }
+body { font-family: var(--font-ui); color: var(--ink); -webkit-font-smoothing: antialiased; }
+a { text-decoration: none; color: inherit; }
+* { box-sizing: border-box; }
+.r-scroll::-webkit-scrollbar { width: 0; height: 0; }
+.r-scroll { scrollbar-width: none; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
