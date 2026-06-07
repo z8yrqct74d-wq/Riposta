@@ -459,6 +459,14 @@ function CoachApp() {
 }
 
 export function CoachAppPage() {
+  const mobile = window.innerWidth < 500;
+  if (mobile) {
+    return (
+      <div className="theme-dark" style={{ height: '100dvh', overflow: 'hidden', background: 'var(--paper)' }}>
+        <CoachApp />
+      </div>
+    );
+  }
   return (
     <div style={{ minHeight: '100vh', background: '#0C1A2E', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <IOSDevice>

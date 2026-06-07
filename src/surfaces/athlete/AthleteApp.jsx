@@ -179,6 +179,14 @@ function AthleteApp() {
 }
 
 export function AthleteAppPage() {
+  const mobile = window.innerWidth < 500;
+  if (mobile) {
+    return (
+      <div style={{ height: '100dvh', overflow: 'hidden', background: 'var(--paper)' }}>
+        <AthleteApp />
+      </div>
+    );
+  }
   return (
     <div style={{ minHeight: '100vh', background: '#243659', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <IOSDevice>

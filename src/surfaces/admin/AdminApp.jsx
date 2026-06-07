@@ -298,6 +298,19 @@ function AdminApp() {
 }
 
 export function AdminAppPage() {
+  const vw = window.innerWidth;
+  if (vw < 900) {
+    const scale = vw / 1340;
+    return (
+      <div style={{ width: '100vw', height: '100dvh', overflow: 'hidden', background: '#0C1A2E', display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
+        <div style={{ transform: `scale(${scale})`, transformOrigin: 'top center', width: 1340, height: 860, flexShrink: 0 }}>
+          <ChromeWindow width={1340} height={860} url="riposte.salle / calendar" tabs={[{ title: 'Riposte · Admin' }]}>
+            <AdminApp />
+          </ChromeWindow>
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{ minHeight: '100vh', background: '#0C1A2E', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <ChromeWindow width={1340} height={860} url="riposte.salle / calendar" tabs={[{ title: 'Riposte · Admin' }]}>
