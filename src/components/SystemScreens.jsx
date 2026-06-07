@@ -14,13 +14,6 @@ function GoogleLogo() {
   );
 }
 
-function AppleLogo() {
-  return (
-    <svg width="17" height="20" viewBox="0 0 814 1000" fill="currentColor" style={{ flexShrink: 0 }}>
-      <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-57.8-155.5-127.4C46 440.4 10.5 273.8 10.5 175.3c0-151.8 99.8-231.9 197.8-231.9 52.5 0 96.1 34.7 129.3 34.7 32 0 81.8-36.4 142.4-36.4 21.9 0 108.2 1.9 171.3 82.3zm-251.1-160.4c-28.4 12.2-70.5 41.4-70.5 109.5 0 71.8 54.2 133.7 111.7 133.7 4.5 0 8.9-.6 12.2-1.9C538.8 357.5 600 307.6 600 213.1c0-46.2-6.4-92.3-50.6-126.4-22.5-17.3-52.5-29.5-87.5-38.5-9-1.9-19.3-2.6-24.9-9.7z"/>
-    </svg>
-  );
-}
 
 export function RiposteLogo({ size = 26, color = 'var(--brand)' }) {
   return (
@@ -61,20 +54,10 @@ export function AuthApp() {
           onClick={() => signIn('google')}
           disabled={!!loading}
           className="r-focusable"
-          style={{ width: '100%', padding: '13px 16px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, font: 'inherit', fontSize: 15, fontWeight: 500, color: 'var(--ink)', cursor: loading ? 'default' : 'pointer', marginBottom: 12, opacity: loading === 'apple' ? 0.5 : 1, transition: 'opacity var(--d-fast)' }}
+          style={{ width: '100%', padding: '13px 16px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, font: 'inherit', fontSize: 15, fontWeight: 500, color: 'var(--ink)', cursor: loading ? 'default' : 'pointer', transition: 'opacity var(--d-fast)' }}
         >
           <GoogleLogo />
           {loading === 'google' ? 'Redirecting…' : 'Continue with Google'}
-        </button>
-
-        <button
-          onClick={() => signIn('apple')}
-          disabled={!!loading}
-          className="r-focusable"
-          style={{ width: '100%', padding: '13px 16px', borderRadius: 'var(--r-btn)', border: 'none', background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, font: 'inherit', fontSize: 15, fontWeight: 500, color: 'var(--paper)', cursor: loading ? 'default' : 'pointer', opacity: loading === 'google' ? 0.5 : 1, transition: 'opacity var(--d-fast)' }}
-        >
-          <AppleLogo />
-          {loading === 'apple' ? 'Redirecting…' : 'Continue with Apple'}
         </button>
 
         <button onClick={() => navigate('/')} className="r-focusable" style={{ marginTop: 28, width: '100%', font: 'inherit', cursor: 'pointer', border: 'none', background: 'transparent', fontSize: 13.5, color: 'var(--faint)', padding: 8 }}>
