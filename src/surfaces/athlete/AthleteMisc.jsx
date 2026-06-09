@@ -303,7 +303,22 @@ export function PaymentsScreen() {
   );
 }
 
-function buildAttHistory(allBookings) {
+function buildDayHistory(allBookings) {
+  const now = new Date();
+  const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  const result = [];
+  for (let d = 27; d >= 0; d--) {
+    const day = new Date(now);
+    day.setDate(now.getDate() - d);
+    day.setHours(0, 0, 0, 0);
+    const dayStr = day.toISOString().split('T')[0];
+    const att = (allBookings || []).some(b => b.slot_date === dayStr && b.status !== 'cancelled');
+    result.push({ label: String(day.getDate()), dow: DOW[day.getDay()], att });
+  }
+  return result;
+}
+
+function buildWeekHistory(allBookings) {
   const now = new Date();
   const result = [];
   for (let w = 11; w >= 0; w--) {
@@ -318,15 +333,34 @@ function buildAttHistory(allBookings) {
       const d = new Date(b.slot_date + 'T12:00:00');
       return d >= weekStart && d <= weekEnd;
     });
-    result.push({ w: `W${12 - w}`, att });
+    result.push({ label: `W${12 - w}`, att });
+  }
+  return result;
+}
+
+function buildMonthHistory(allBookings) {
+  const now = new Date();
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const result = [];
+  for (let mo = 5; mo >= 0; mo--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - mo, 1);
+    const monthStart = new Date(d.getFullYear(), d.getMonth(), 1);
+    const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+    const count = (allBookings || []).filter(b => {
+      if (!b.slot_date || b.status === 'cancelled') return false;
+      const bd = new Date(b.slot_date + 'T12:00:00');
+      return bd >= monthStart && bd <= monthEnd;
+    }).length;
+    result.push({ label: MONTHS[d.getMonth()], count });
   }
   return result;
 }
 
 export function ProgressScreen({ memberId }) {
   const [notes, setNotes] = React.useState([]);
-  const [attHistory, setAttHistory] = React.useState(() => Array.from({ length: 12 }, (_, i) => ({ w: `W${i + 1}`, att: false })));
+  const [allBookings, setAllBookings] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
+  const [view, setView] = React.useState('week');
 
   React.useEffect(() => {
     if (!memberId) return;
@@ -335,46 +369,113 @@ export function ProgressScreen({ memberId }) {
       getBookingsForMember(memberId),
       getNotesForMember(memberId),
     ]).then(([bookings, fetchedNotes]) => {
-      setAttHistory(buildAttHistory(bookings));
+      setAllBookings(bookings || []);
       setNotes(fetchedNotes || []);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [memberId]);
 
-  const attended = attHistory.filter(w => w.att).length;
-  const rate = attHistory.length > 0 ? Math.round(attended / attHistory.length * 100) : 0;
-  let streak = 0;
-  for (let i = attHistory.length - 1; i >= 0; i--) {
-    if (attHistory[i].att) streak++;
-    else break;
-  }
+  const { history, attended, rate, streakLabel, periodLabel, maxCount } = React.useMemo(() => {
+    if (view === 'day') {
+      const history = buildDayHistory(allBookings);
+      const attended = history.filter(d => d.att).length;
+      const rate = history.length > 0 ? Math.round(attended / history.length * 100) : 0;
+      let streak = 0;
+      for (let i = history.length - 1; i >= 0; i--) { if (history[i].att) streak++; else break; }
+      return { history, attended, rate, streakLabel: streak > 0 ? `${streak}d` : '—', periodLabel: 'Last 28 days', maxCount: 1 };
+    }
+    if (view === 'month') {
+      const history = buildMonthHistory(allBookings);
+      const attended = history.reduce((s, m) => s + m.count, 0);
+      const activeMo = history.filter(m => m.count > 0).length;
+      const rate = history.length > 0 ? Math.round(activeMo / history.length * 100) : 0;
+      let streak = 0;
+      for (let i = history.length - 1; i >= 0; i--) { if (history[i].count > 0) streak++; else break; }
+      const maxCount = Math.max(...history.map(m => m.count), 1);
+      return { history, attended, rate, streakLabel: streak > 0 ? `${streak}mo` : '—', periodLabel: 'Last 6 months', maxCount };
+    }
+    const history = buildWeekHistory(allBookings);
+    const attended = history.filter(w => w.att).length;
+    const rate = history.length > 0 ? Math.round(attended / history.length * 100) : 0;
+    let streak = 0;
+    for (let i = history.length - 1; i >= 0; i--) { if (history[i].att) streak++; else break; }
+    return { history, attended, rate, streakLabel: streak > 0 ? `${streak} wk${streak > 1 ? 's' : ''}` : '—', periodLabel: 'Last 12 weeks', maxCount: 1 };
+  }, [view, allBookings]);
+
+  const isDay = view === 'day';
+  const isMonth = view === 'month';
+  const BAR_MAX_H = 52;
 
   return (
     <div style={{ height: '100%' }}>
       <PageHead title="Progress" />
       <div className="r-scroll" style={{ overflowY: 'auto', height: 'calc(100% - 96px)', padding: '8px 16px 100px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {/* Segmented control */}
+        <div style={{ display: 'flex', background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 30, padding: 3, gap: 2 }}>
+          {['day', 'week', 'month'].map(v => (
+            <button key={v} onClick={() => setView(v)} style={{
+              flex: 1, padding: '7px 0', font: 'inherit', fontSize: 13.5, fontWeight: view === v ? 600 : 400,
+              background: view === v ? 'var(--paper)' : 'transparent',
+              color: view === v ? 'var(--ink)' : 'var(--muted)',
+              border: view === v ? '1px solid var(--hairline)' : '1px solid transparent',
+              borderRadius: 24, cursor: 'pointer',
+              boxShadow: view === v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              transition: 'background var(--d-fast), color var(--d-fast)',
+            }}>
+              {v.charAt(0).toUpperCase() + v.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        {/* Stats row */}
         <div style={{ display: 'flex', gap: 10 }}>
-          {[['Attendance', rate + '%', 'var(--success)'], ['Sessions', attended, 'var(--ink)'], ['Streak', streak > 0 ? `${streak} wk${streak > 1 ? 's' : ''}` : '—', 'var(--steel)']].map((s, i) => (
+          {[
+            ['Attendance', rate + '%', 'var(--success)'],
+            ['Sessions', attended, 'var(--ink)'],
+            ['Streak', streakLabel, 'var(--steel)'],
+          ].map((s, i) => (
             <div key={i} style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: '14px 12px', textAlign: 'center' }}>
               <div className="r-display r-tabular" style={{ fontSize: 26, color: s[2] }}>{s[1]}</div>
               <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 2 }}>{s[0]}</div>
             </div>
           ))}
         </div>
+
+        {/* Chart card */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 14 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Last 12 weeks</div>
-          <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end' }}>
-            {attHistory.map((w, i) => (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <div style={{ width: '100%', height: 28, borderRadius: 4, background: w.att ? 'var(--brand)' : 'var(--hairline)', opacity: w.att ? 1 : 0.5, transition: 'background var(--d-base)' }} />
-                <span style={{ fontSize: 9, color: 'var(--faint)', whiteSpace: 'nowrap' }}>{w.w}</span>
-              </div>
-            ))}
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>{periodLabel}</div>
+          <div style={{ overflowX: isDay ? 'auto' : 'visible', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' }}>
+            <div style={{ display: 'flex', gap: isDay ? 3 : 4, alignItems: 'flex-end', width: isDay ? 'max-content' : '100%' }}>
+              {history.map((item, i) => {
+                const att = isMonth ? item.count > 0 : item.att;
+                const barH = isMonth ? Math.max(6, Math.round(item.count / maxCount * BAR_MAX_H)) : 28;
+                return (
+                  <div key={i} style={{ flex: isDay ? '0 0 20px' : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                    {isMonth && (
+                      <div style={{ fontSize: 9.5, color: 'var(--muted)', marginBottom: 1 }}>{item.count > 0 ? item.count : ''}</div>
+                    )}
+                    <div style={{ width: '100%', height: barH, borderRadius: 4, background: att ? 'var(--brand)' : 'var(--hairline)', opacity: att ? 1 : 0.45, transition: 'height 350ms ease, background var(--d-base)' }} />
+                    <span style={{ fontSize: 9, color: 'var(--faint)', whiteSpace: 'nowrap' }}>{item.label}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 12, marginTop: 10, justifyContent: 'flex-end' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--muted)' }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--brand)', display: 'inline-block' }} /> Attended</span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--muted)' }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--hairline)', display: 'inline-block' }} /> Absent</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--muted)' }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--brand)', display: 'inline-block' }} />
+              {isMonth ? 'Sessions' : 'Attended'}
+            </span>
+            {!isMonth && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--muted)' }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--hairline)', display: 'inline-block' }} />
+                Absent
+              </span>
+            )}
           </div>
         </div>
+
+        {/* Coach notes */}
         <div>
           <SectionLabel>Coach notes</SectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1006,7 +1107,7 @@ function EmergencyContactsScreen({ memberId, onClose }) {
               </button>
             </div>
             {!c.is_primary && (
-              <button onClick={() => handleSetPrimary(c.id)} className="r-focusable" style={{ display: 'block', width: '100%', padding: '10px 14px', borderTop: '1px solid var(--hairline)', background: 'transparent', border: 'none', borderTop: '1px solid var(--hairline)', font: 'inherit', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand)', textAlign: 'center' }}>
+              <button onClick={() => handleSetPrimary(c.id)} className="r-focusable" style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderTop: '1px solid var(--hairline)', font: 'inherit', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand)', textAlign: 'center' }}>
                 Set as primary
               </button>
             )}
