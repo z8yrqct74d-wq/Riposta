@@ -10,7 +10,7 @@ ALTER TABLE bookings ADD COLUMN IF NOT EXISTS attendance_status text DEFAULT 'pe
 -- Group session attendance
 CREATE TABLE IF NOT EXISTS session_attendance (
   id           uuid primary key default gen_random_uuid(),
-  block_id     uuid references calendar_blocks(id) on delete cascade,
+  block_id     text references calendar_blocks(id) on delete cascade,
   session_date date not null,
   member_id    uuid references members(id) on delete set null,
   status       text not null default 'pending',
