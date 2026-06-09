@@ -183,6 +183,43 @@ export async function upsertMemberFromAuth(user) {
   return data;
 }
 
+export async function updateMember(id, patch) {
+  const { error } = await supabase.from('members').update(patch).eq('id', id);
+  if (error) throw error;
+}
+
+export async function getEmergencyContacts(memberId) {
+  const { data, error } = await supabase
+    .from('emergency_contacts')
+    .select('*')
+    .eq('member_id', memberId)
+    .order('is_primary', { ascending: false })
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function addEmergencyContact(contact) {
+  const { data, error } = await supabase
+    .from('emergency_contacts')
+    .insert(contact)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function setPrimaryContact(memberId, contactId) {
+  await supabase.from('emergency_contacts').update({ is_primary: false }).eq('member_id', memberId);
+  const { error } = await supabase.from('emergency_contacts').update({ is_primary: true }).eq('id', contactId);
+  if (error) throw error;
+}
+
+export async function deleteEmergencyContact(id) {
+  const { error } = await supabase.from('emergency_contacts').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function updateMemberDocument(memberId, docType, { url, issueDate, expiryDate, licenceNumber }) {
   const prefix = docType === 'medical' ? 'medical_cert' : 'federation_licence';
   const patch = {};

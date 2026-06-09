@@ -4,7 +4,31 @@ import { WeaponGlyph, WEAPON_LABEL, Icon, Avatar, PaymentPill, VisaBadge } from 
 import { PrimaryBtn, SuccessRing } from './AthleteBook';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../../lib/supabase';
-import { cancelBooking, getMember, updateMemberCredits, getBookingsForMember, getNotesForMember, updateMemberDocument, uploadMemberDocument } from '../../lib/db';
+import { cancelBooking, getMember, updateMember, updateMemberCredits, getBookingsForMember, getNotesForMember, updateMemberDocument, uploadMemberDocument, getEmergencyContacts, addEmergencyContact, setPrimaryContact, deleteEmergencyContact } from '../../lib/db';
+
+const PLAN_OPTIONS = [
+  { value: 'Trial',       label: 'Trial' },
+  { value: 'Lesson pack', label: 'Lesson pack' },
+  { value: 'Monthly',     label: 'Monthly' },
+  { value: 'Competitor',  label: 'Competitor' },
+  { value: 'Drop-in',     label: 'Drop-in' },
+];
+
+const WEAPON_OPTIONS = [
+  { value: 'foil',  label: 'Foil' },
+  { value: 'epee',  label: 'Épée' },
+  { value: 'sabre', label: 'Sabre' },
+];
+
+const CATEGORY_OPTIONS = [
+  { value: 'U11',          label: 'Under 11',     sub: 'U11' },
+  { value: 'U14',          label: 'Under 14',     sub: 'U14' },
+  { value: 'U17',          label: 'Under 17',     sub: 'U17' },
+  { value: 'U20',          label: 'Under 20',     sub: 'U20' },
+  { value: 'Senior',       label: 'Senior' },
+  { value: 'Veteran',      label: 'Veteran' },
+  { value: 'Recreational', label: 'Recreational' },
+];
 
 export function PageHead({ greeting, title }) {
   return (
@@ -614,6 +638,187 @@ export function DocumentSheet({ type, member, memberId, onClose, onSaved }) {
   );
 }
 
+function PickerSheet({ title, options, value, onSelect, onClose }) {
+  return (
+    <BottomSheet onClose={onClose}>
+      <div style={{ padding: '0 20px 32px' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4, paddingTop: 2 }}>{title}</div>
+        <div>
+          {options.map((opt, i, arr) => (
+            <button key={opt.value} onClick={() => { onSelect(opt.value); onClose(); }} className="r-focusable" style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '14px 4px',
+              borderBottom: i < arr.length - 1 ? '1px solid var(--hairline)' : 'none',
+              background: 'transparent', border: 'none', font: 'inherit',
+              cursor: 'pointer', width: '100%', textAlign: 'left',
+            }}>
+              {opt.value === 'foil' || opt.value === 'epee' || opt.value === 'sabre'
+                ? <WeaponGlyph type={opt.value} size={20} color={value === opt.value ? 'var(--brand)' : 'var(--faint)'} />
+                : null}
+              <span style={{ flex: 1, fontSize: 16, color: value === opt.value ? 'var(--brand)' : 'var(--ink)', fontWeight: value === opt.value ? 600 : 400 }}>
+                {opt.label}
+              </span>
+              {opt.sub && <span style={{ fontSize: 12, color: 'var(--faint)' }}>{opt.sub}</span>}
+              {value === opt.value && <Icon name="check" size={18} color="var(--brand)" strokeWidth={2.5} />}
+            </button>
+          ))}
+        </div>
+      </div>
+    </BottomSheet>
+  );
+}
+
+function AddContactSheet({ memberId, isFirst, onClose, onSaved }) {
+  const [name, setName] = React.useState('');
+  const [role, setRole] = React.useState('');
+  const [phone, setPhone] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const ROLES = ['Mother', 'Father', 'Guardian', 'Spouse/Partner', 'Sibling', 'Coach', 'Other'];
+  const canSave = name.trim().length > 0;
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      const c = await addEmergencyContact({ member_id: memberId, name: name.trim(), role: role || null, phone: phone.trim() || null, is_primary: isFirst });
+      onSaved(c);
+    } catch (e) {}
+    setSaving(false);
+  };
+
+  return (
+    <BottomSheet onClose={onClose}>
+      <div style={{ padding: '4px 20px 36px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="r-display" style={{ fontSize: 20, color: 'var(--ink)' }}>Add emergency contact</div>
+        <div>
+          <SectionLabel>Name *</SectionLabel>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Full name"
+            style={{ width: '100%', boxSizing: 'border-box', background: 'var(--paper)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-btn)', padding: '12px 14px', font: 'inherit', fontSize: 14, color: 'var(--ink)', outline: 'none' }} />
+        </div>
+        <div>
+          <SectionLabel>Relationship</SectionLabel>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {ROLES.map(r => (
+              <button key={r} onClick={() => setRole(r === role ? '' : r)} className="r-focusable" style={{
+                font: 'inherit', cursor: 'pointer', padding: '7px 14px', borderRadius: 'var(--r-pill)', fontSize: 13, fontWeight: 500,
+                background: role === r ? 'var(--brand-tint)' : 'var(--surface)',
+                color: role === r ? 'var(--brand)' : 'var(--muted)',
+                border: role === r ? '1px solid var(--brand)' : '1px solid var(--hairline)',
+              }}>{r}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <SectionLabel>Phone number</SectionLabel>
+          <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+40 700 000 000"
+            style={{ width: '100%', boxSizing: 'border-box', background: 'var(--paper)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-btn)', padding: '12px 14px', font: 'inherit', fontSize: 14, color: 'var(--ink)', outline: 'none' }} />
+        </div>
+        <button onClick={handleSave} disabled={!canSave || saving} className="r-focusable" style={{
+          marginTop: 4, padding: 16, font: 'inherit', fontSize: 15.5, fontWeight: 600,
+          background: canSave ? 'var(--brand)' : 'var(--hairline)',
+          color: canSave ? '#fff' : 'var(--faint)',
+          border: 'none', borderRadius: 'var(--r-btn)', cursor: canSave ? 'pointer' : 'default',
+          boxShadow: canSave ? '0 4px 16px rgba(59,111,224,0.3)' : 'none',
+          transition: 'background var(--d-fast)',
+        }}>
+          {saving ? 'Saving…' : 'Add contact'}
+        </button>
+      </div>
+    </BottomSheet>
+  );
+}
+
+function EmergencyContactsScreen({ memberId, onClose }) {
+  const [contacts, setContacts] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [addOpen, setAddOpen] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try { setContacts(await getEmergencyContacts(memberId)); } catch (e) {}
+    setLoading(false);
+  }, [memberId]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const handleSetPrimary = async (id) => {
+    await setPrimaryContact(memberId, id).catch(() => {});
+    setContacts(prev => prev.map(c => ({ ...c, is_primary: c.id === id })));
+  };
+
+  const handleDelete = async (id) => {
+    await deleteEmergencyContact(id).catch(() => {});
+    setContacts(prev => prev.filter(c => c.id !== id));
+  };
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 80, background: 'var(--paper)', display: 'flex', flexDirection: 'column', animation: 'r-slide-right 280ms var(--e-enter) both' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '52px 20px 16px', borderBottom: '1px solid var(--hairline)', background: 'var(--surface)', flexShrink: 0 }}>
+        <button onClick={onClose} className="r-focusable" style={{ width: 36, height: 36, borderRadius: 'var(--r-pill)', border: '1px solid var(--hairline)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+          <Icon name="chevL" size={18} color="var(--ink)" />
+        </button>
+        <div style={{ flex: 1, fontSize: 17, fontWeight: 600, color: 'var(--ink)', fontFamily: 'var(--font-display)' }}>Emergency contacts</div>
+        <button onClick={() => setAddOpen(true)} className="r-focusable" style={{ display: 'flex', alignItems: 'center', gap: 6, font: 'inherit', cursor: 'pointer', background: 'var(--brand)', color: '#fff', border: 'none', borderRadius: 'var(--r-pill)', padding: '7px 14px', fontSize: 13.5, fontWeight: 600 }}>
+          <Icon name="plus" size={14} color="#fff" strokeWidth={2.5} /> Add
+        </button>
+      </div>
+
+      <div className="r-scroll" style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 40px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--brand)', opacity: 0.35, animation: `r-live-pulse 1s ease-in-out ${i*200}ms infinite` }} />)}
+            </div>
+          </div>
+        ) : contacts.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 16px' }}>
+            <div style={{ width: 56, height: 56, borderRadius: 16, background: 'var(--surface)', border: '1px solid var(--hairline)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <Icon name="users" size={26} color="var(--faint)" />
+            </div>
+            <div className="r-display" style={{ fontSize: 18, color: 'var(--ink)', marginBottom: 6 }}>No contacts yet</div>
+            <div style={{ fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.5 }}>Add someone we can reach in an emergency.</div>
+          </div>
+        ) : contacts.map((c, i) => (
+          <div key={c.id} style={{ background: 'var(--surface)', border: `1px solid ${c.is_primary ? 'var(--brand)' : 'var(--hairline)'}`, borderRadius: 'var(--r-card)', overflow: 'hidden', animation: `r-rise var(--d-base) var(--e-enter) ${i*40}ms both` }}>
+            <div style={{ padding: '14px 14px 12px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: c.is_primary ? 'var(--brand-tint)' : 'var(--surface)', border: `1px solid ${c.is_primary ? 'var(--brand)' : 'var(--hairline)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon name="user" size={20} color={c.is_primary ? 'var(--brand)' : 'var(--faint)'} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>{c.name}</span>
+                  {c.is_primary && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--brand)', background: 'var(--brand-tint)', padding: '2px 8px', borderRadius: 'var(--r-pill)', letterSpacing: '0.05em', textTransform: 'uppercase', flexShrink: 0 }}>Primary</span>
+                  )}
+                </div>
+                {c.role  && <div style={{ fontSize: 13, color: 'var(--muted)' }}>{c.role}</div>}
+                {c.phone && <div className="r-mono" style={{ fontSize: 13.5, color: 'var(--ink)', marginTop: 2 }}>{c.phone}</div>}
+              </div>
+              <button onClick={() => handleDelete(c.id)} className="r-focusable" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, borderRadius: 8, flexShrink: 0 }}>
+                <Icon name="x" size={16} color="var(--faint)" />
+              </button>
+            </div>
+            {!c.is_primary && (
+              <button onClick={() => handleSetPrimary(c.id)} className="r-focusable" style={{ display: 'block', width: '100%', padding: '10px 14px', borderTop: '1px solid var(--hairline)', background: 'transparent', border: 'none', borderTop: '1px solid var(--hairline)', font: 'inherit', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand)', textAlign: 'center' }}>
+                Set as primary
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {addOpen && (
+        <AddContactSheet
+          memberId={memberId}
+          isFirst={contacts.length === 0}
+          onClose={() => setAddOpen(false)}
+          onSaved={(c) => { setContacts(prev => [...prev, c]); setAddOpen(false); }}
+        />
+      )}
+    </div>
+  );
+}
+
 function ProfileRow({ icon, label, value, accent, onTap, last }) {
   const Tag = onTap ? 'button' : 'div';
   return (
@@ -651,7 +856,19 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
   const navigate = useNavigate();
   const compRef = React.useRef(null);
   const scrollRef = React.useRef(null);
-  const [docSheet, setDocSheet] = React.useState(null); // 'medical' | 'federation' | null
+  const [docSheet, setDocSheet] = React.useState(null);
+  const [picker, setPicker] = React.useState(null); // { field, title, options, value }
+  const [emergencyOpen, setEmergencyOpen] = React.useState(false);
+  const [localOverrides, setLocalOverrides] = React.useState({});
+  const dobRef = React.useRef(null);
+
+  const mf = (field) => localOverrides[field] ?? member?.[field];
+
+  const handleFieldSave = async (field, value) => {
+    setLocalOverrides(prev => ({ ...prev, [field]: value }));
+    try { await updateMember(memberId, { [field]: value }); onMemberUpdate?.(); }
+    catch { setLocalOverrides(prev => { const n = { ...prev }; delete n[field]; return n; }); }
+  };
 
   React.useEffect(() => {
     if (focusSection === 'compliance' && compRef.current && scrollRef.current) {
@@ -698,7 +915,7 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
 
       <div ref={scrollRef} className="r-scroll" style={{ flex: 1, overflowY: 'auto', padding: '20px 16px 100px' }}>
         <div ref={compRef}>
-          <ProfileSection title="Compliance & documents" highlight={focusSection === 'compliance'}>
+          <ProfileSection title="Documents" highlight={focusSection === 'compliance'}>
             {/* Medical certificate row */}
             <button onClick={() => setDocSheet('medical')} className="r-focusable" style={{ display: 'flex', alignItems: 'center', width: '100%', padding: 14, borderBottom: '1px solid var(--hairline)', background: 'transparent', border: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -742,18 +959,23 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
         </div>
 
         <ProfileSection title="Club membership">
-          <ProfileRow label="Plan" value={member?.plan_name || '—'} />
-          <ProfileRow label="Weapon" value={weaponLabel
-            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><WeaponGlyph type={member.weapon} size={16} /> {weaponLabel}</span>
-            : '—'} />
-          <ProfileRow label="Category" value={member?.category || '—'} />
+          <ProfileRow label="Plan"     value={mf('plan_name') || '—'} onTap={() => setPicker({ field: 'plan_name', title: 'Membership plan', options: PLAN_OPTIONS, value: mf('plan_name') })} />
+          <ProfileRow label="Weapon"   value={mf('weapon') ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><WeaponGlyph type={mf('weapon')} size={16} />{WEAPON_LABEL[mf('weapon')] || mf('weapon')}</span> : '—'} onTap={() => setPicker({ field: 'weapon', title: 'Weapon', options: WEAPON_OPTIONS, value: mf('weapon') })} />
+          <ProfileRow label="Category" value={mf('category') || '—'} onTap={() => setPicker({ field: 'category', title: 'Category', options: CATEGORY_OPTIONS, value: mf('category') })} />
           <ProfileRow label="Member since" value={memberSince} last />
         </ProfileSection>
 
         <ProfileSection title="Personal">
-          <ProfileRow icon="user" label="Date of birth" value="—" />
+          {/* Date of birth — tap triggers native date picker via hidden input */}
+          <div style={{ position: 'relative' }}>
+            <ProfileRow icon="user" label="Date of birth" value={mf('date_of_birth') ? formatDocDate(mf('date_of_birth')) : '—'} onTap={() => dobRef.current?.click()} />
+            <input ref={dobRef} type="date" value={mf('date_of_birth') || ''} onChange={e => handleFieldSave('date_of_birth', e.target.value || null)}
+              style={{ position: 'fixed', opacity: 0, top: -200, left: -200, width: 1, height: 1, pointerEvents: 'none' }} />
+          </div>
           <ProfileRow icon="message" label="Email" value={email || '—'} />
-          <ProfileRow icon="bell" label="Emergency contact" value="—" onTap={() => {}} last />
+          <ProfileRow icon="users" label="Emergency contacts"
+            value={<span style={{ fontSize: 12, color: 'var(--brand)', fontWeight: 600 }}>Manage →</span>}
+            onTap={() => setEmergencyOpen(true)} last />
         </ProfileSection>
 
         <ProfileSection title="Account">
@@ -763,6 +985,22 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
             : <ProfileRow icon="lock" label="Sign in" value="" accent="var(--brand)" onTap={() => navigate('/auth')} last />}
         </ProfileSection>
       </div>
+
+      {/* Picker sheet for plan / weapon / category */}
+      {picker && (
+        <PickerSheet
+          title={picker.title}
+          options={picker.options}
+          value={picker.value}
+          onSelect={(val) => handleFieldSave(picker.field, val)}
+          onClose={() => setPicker(null)}
+        />
+      )}
+
+      {/* Emergency contacts screen */}
+      {emergencyOpen && (
+        <EmergencyContactsScreen memberId={memberId} onClose={() => setEmergencyOpen(false)} />
+      )}
 
       {/* Document detail sheet — slides in over profile */}
       {docSheet && (
