@@ -258,6 +258,17 @@ export async function getMemberByEmail(email) {
   return data;
 }
 
+// Single source of truth for role. Coach access = being in the coaches
+// table; everyone else is an athlete. A self-selected choice is never the
+// authority here.
+export async function resolveUserRole(user) {
+  if (!user?.email) return { role: 'athlete', member: null, coach: null };
+  const coach = await getCoachByEmail(user.email).catch(() => null);
+  if (coach) return { role: 'coach', coach, member: null };
+  const member = await upsertMemberFromAuth(user).catch(() => null);
+  return { role: 'athlete', member, coach: null };
+}
+
 export async function upsertMemberFromAuth(user) {
   const existing = await getMemberByEmail(user.email);
   if (existing) return existing;

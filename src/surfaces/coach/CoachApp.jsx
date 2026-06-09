@@ -4,7 +4,7 @@ import { IOSDevice } from '../../components/IOSFrame';
 import { SessionAttendance, LessonView } from './CoachSession';
 import { supabase } from '../../lib/supabase';
 import {
-  getCalendarBlocks, getCoaches, getCoachByEmail, updateCoachAvailability,
+  getCalendarBlocks, resolveUserRole, updateCoachAvailability,
   getBookingsForCoachOnDate, getCoachWeekStats, getMembers, getAllBookingsLight,
 } from '../../lib/db';
 
@@ -621,22 +621,21 @@ function CoachApp() {
   const [stack, setStack] = React.useState(null);
   const [selectedItem, setSelectedItem] = React.useState(null);
   const [coach, setCoach] = React.useState(null);
+  // undefined = checking, true = confirmed coach, false = not a coach (bounce)
+  const [authed, setAuthed] = React.useState(undefined);
 
   React.useEffect(() => {
     const resolve = async () => {
       try {
         const { data } = await supabase.auth.getUser();
-        const email = data?.user?.email;
-        if (email) {
-          const found = await getCoachByEmail(email).catch(() => null);
-          if (found) { setCoach(found); return; }
-        }
-      } catch {}
-      // Fall back to first coach in DB
-      try {
-        const coaches = await getCoaches();
-        if (coaches?.[0]) setCoach(coaches[0]);
-      } catch {}
+        const user = data?.user;
+        if (!user) { window.location.replace('/athlete'); return; }
+        const { role, coach: found } = await resolveUserRole(user);
+        if (role === 'coach' && found) { setCoach(found); setAuthed(true); }
+        else { window.location.replace('/athlete'); }
+      } catch {
+        window.location.replace('/athlete');
+      }
     };
     resolve();
   }, []);
@@ -650,6 +649,19 @@ function CoachApp() {
     await supabase.auth.signOut().catch(() => {});
     window.location.href = '/';
   };
+
+  // While verifying the coach (or bouncing a non-coach), show a minimal loader.
+  if (authed !== true) {
+    return (
+      <div className="theme-dark" style={{ position: 'absolute', inset: 0, background: 'var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--brand)', opacity: 0.35, animation: `r-live-pulse 1s ease-in-out ${i * 200}ms infinite` }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="theme-dark" style={{ position: 'absolute', inset: 0, background: 'var(--paper)', overflow: 'hidden' }}>

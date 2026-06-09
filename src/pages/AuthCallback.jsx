@@ -1,25 +1,37 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { resolveUserRole } from '../lib/db';
 import { RiposteLogo } from '../components/SystemScreens';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
 
   React.useEffect(() => {
-    // Read once at mount so both handlers navigate to the same place
-    const returnTo = sessionStorage.getItem('auth_return') || '/';
-    sessionStorage.removeItem('auth_return');
+    let done = false;
+
+    // Resolve role from the backend, then route. The walkthrough's role
+    // choice is only a hint — it tailors the fallback, never grants access.
+    async function route(session) {
+      if (done || !session?.user) return;
+      done = true;
+      const hint = sessionStorage.getItem('auth_role_hint');
+      sessionStorage.removeItem('auth_role_hint');
+      let role = 'athlete';
+      try {
+        ({ role } = await resolveUserRole(session.user));
+      } catch {}
+      if (role === 'coach') navigate('/coach', { replace: true });
+      else if (hint === 'coach') navigate('/athlete?coachPending=1', { replace: true });
+      else navigate('/athlete', { replace: true });
+    }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        subscription.unsubscribe();
-        navigate(returnTo, { replace: true });
-      }
+      if (session) { subscription.unsubscribe(); route(session); }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) navigate(returnTo, { replace: true });
+      if (session) route(session);
     });
 
     return () => subscription.unsubscribe();

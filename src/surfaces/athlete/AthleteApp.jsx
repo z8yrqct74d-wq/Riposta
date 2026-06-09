@@ -220,6 +220,10 @@ function AthleteApp() {
   const [upcomingBookings, setUpcomingBookings] = React.useState([]);
   // undefined = checking, true = show onboarding, false = show app
   const [onboarding, setOnboarding] = React.useState(undefined);
+  // Set when a user picked "coach" in onboarding but isn't provisioned as one.
+  const [coachPending, setCoachPending] = React.useState(
+    () => new URLSearchParams(window.location.search).get('coachPending') === '1'
+  );
 
   React.useEffect(() => {
     let mounted = true;
@@ -329,6 +333,22 @@ function AthleteApp() {
       <div key={tab} style={{ position: 'absolute', inset: 0, animation: 'r-fade var(--d-base) var(--e-standard)' }}>
         {screens[tab]}
       </div>
+
+      {coachPending && (
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 90, padding: '52px 14px 12px', background: 'linear-gradient(to bottom, var(--paper) 70%, transparent)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11, background: 'var(--steel-tint)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: '12px 13px', animation: 'r-rise var(--d-base) var(--e-enter) both' }}>
+            <div style={{ flexShrink: 0, marginTop: 1 }}><Icon name="alertCircle" size={18} color="var(--steel)" /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>Coach access not set up yet</div>
+              <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2, lineHeight: 1.45 }}>You're signed in as an athlete. Ask your club admin to add you as a coach.</div>
+            </div>
+            <button onClick={() => setCoachPending(false)} className="r-focusable" style={{ flexShrink: 0, width: 26, height: 26, borderRadius: 'var(--r-pill)', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <Icon name="x" size={15} color="var(--faint)" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {!booking && !checkin && <TabBar active={tab} onChange={changeTab} />}
 
       {booking && (

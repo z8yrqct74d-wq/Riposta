@@ -60,22 +60,24 @@ const FEATURES = [
   },
 ];
 
-// Exactly 3 screens: welcome, features, login
-const N_TOTAL = 3;
+// Exactly 4 screens: welcome, features, role, login
+const N_TOTAL = 4;
 
 export function AthleteOnboarding({ onContinue }) {
   const [step, setStep] = React.useState(0);
   const [signingIn, setSigningIn] = React.useState(false);
+  const [role, setRole] = React.useState('athlete');
 
   const isDark = step === 0;
-  const isLogin = step === 2;
+  const isLogin = step === 3;
 
   const goNext = () => setStep(s => Math.min(s + 1, N_TOTAL - 1));
   const goPrev = () => setStep(s => Math.max(s - 1, 0));
 
   const handleSignIn = async () => {
     setSigningIn(true);
-    sessionStorage.setItem('auth_return', '/athlete');
+    // Hint only — the backend (coaches table) decides the real role on callback.
+    sessionStorage.setItem('auth_role_hint', role);
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin + '/auth/callback' },
@@ -172,7 +174,53 @@ export function AthleteOnboarding({ onContinue }) {
           </div>
         </div>
 
-        {/* ── Screen 3 of 3: Login ───────────────────────────── */}
+        {/* ── Screen 3 of 4: Role choice ─────────────────────── */}
+        <div style={{
+          width: panelW, height: '100%',
+          background: 'var(--paper)',
+          display: 'flex', flexDirection: 'column',
+          padding: '64px 24px 160px',
+        }}>
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Who are you?</div>
+            <h2 className="r-display" style={{ fontSize: 34, color: 'var(--ink)', margin: 0, lineHeight: 1.1 }}>
+              Choose your<br />role.
+            </h2>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {[
+              { id: 'athlete', icon: 'user', color: 'var(--brand)', bg: 'var(--brand-tint)', label: "I'm an athlete", sub: 'Book lessons, track progress, and check in.' },
+              { id: 'coach',   icon: 'users', color: 'var(--steel)', bg: 'var(--steel-tint)', label: "I'm a coach", sub: 'Manage your schedule, sessions, and roster.' },
+            ].map((r, i) => {
+              const on = role === r.id;
+              return (
+                <button key={r.id} onClick={() => setRole(r.id)} className="r-focusable" style={{
+                  display: 'flex', gap: 14, alignItems: 'center', textAlign: 'left', width: '100%',
+                  background: 'var(--surface)',
+                  border: on ? '2px solid var(--brand)' : '1px solid var(--hairline)',
+                  borderRadius: 16, padding: on ? '13px 15px' : '14px 16px',
+                  cursor: 'pointer', font: 'inherit',
+                  animation: `r-rise var(--d-base) var(--e-enter) ${i * 70}ms both`,
+                  transition: 'border var(--d-fast)',
+                }}>
+                  <div style={{ width: 46, height: 46, borderRadius: 13, flexShrink: 0, background: r.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name={r.icon} size={23} color={r.color} strokeWidth={1.8} />
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>{r.label}</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2, lineHeight: 1.45 }}>{r.sub}</div>
+                  </div>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, border: on ? 'none' : '2px solid var(--hairline)', background: on ? 'var(--brand)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {on && <Icon name="check" size={13} color="#fff" strokeWidth={3} />}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Screen 4 of 4: Login ───────────────────────────── */}
         <div style={{
           width: panelW, height: '100%',
           background: 'var(--paper)',
