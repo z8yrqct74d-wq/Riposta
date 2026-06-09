@@ -427,8 +427,9 @@ function formatDocDate(d) {
   return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function docStatusFromExpiry(expiryDate) {
-  if (!expiryDate) return 'valid';
+function getDocStatus(url, expiryDate) {
+  if (!url && !expiryDate) return 'pending';
+  if (!expiryDate) return 'pending'; // has file but no expiry — incomplete
   const exp = new Date(expiryDate);
   const now = new Date();
   const soon = new Date(now.getTime() + 30 * 24 * 3600 * 1000);
@@ -449,9 +450,7 @@ export function DocumentSheet({ type, member, memberId, onClose, onSaved }) {
   const [saveError, setSaveError] = React.useState(null);
   const fileInputRef = React.useRef(null);
 
-  const certStatus = isMedical
-    ? (expiryDate ? docStatusFromExpiry(expiryDate) : (member?.visa_status || 'valid'))
-    : docStatusFromExpiry(expiryDate);
+  const certStatus = getDocStatus(existingUrl || pendingFile, expiryDate);
 
   const handleFilePick = (e) => {
     const file = e.target.files?.[0];
@@ -678,8 +677,8 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
     ? new Date(member.created_at).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
     : '—';
 
-  const medStatus = member?.visa_status || 'valid';
-  const fedStatus = docStatusFromExpiry(member?.federation_licence_expiry_date);
+  const medStatus = getDocStatus(member?.medical_cert_url, member?.medical_cert_expiry_date);
+  const fedStatus = getDocStatus(member?.federation_licence_url, member?.federation_licence_expiry_date);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
@@ -709,6 +708,7 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
                     ? `Expires ${formatDocDate(member.medical_cert_expiry_date)}`
                     : medStatus === 'expired' ? 'Expired — tap to upload renewal'
                     : medStatus === 'expiring' ? 'Expires soon — tap to upload'
+                    : medStatus === 'pending' ? 'Not uploaded yet — tap to add'
                     : 'Tap to add document'}
                 </div>
               </div>
@@ -730,7 +730,7 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
                 <div className="r-tabular" style={{ fontSize: 12.5, color: 'var(--muted)' }}>
                   {member?.federation_licence_expiry_date
                     ? `Expires ${formatDocDate(member.federation_licence_expiry_date)}`
-                    : 'Tap to add document'}
+                    : 'Not uploaded yet — tap to add'}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>

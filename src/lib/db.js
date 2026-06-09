@@ -192,7 +192,7 @@ export async function updateMemberDocument(memberId, docType, { url, issueDate, 
   if (docType === 'federation' && licenceNumber !== undefined) patch.federation_licence_number = licenceNumber;
   if (docType === 'medical' && expiryDate !== undefined) {
     if (!expiryDate) {
-      patch.visa_status = 'valid';
+      patch.visa_status = 'pending';
     } else {
       const exp = new Date(expiryDate);
       const now = new Date();
