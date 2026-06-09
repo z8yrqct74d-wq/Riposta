@@ -307,7 +307,7 @@ function buildDayHistory(allBookings) {
   const now = new Date();
   const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
   const result = [];
-  for (let d = 27; d >= 0; d--) {
+  for (let d = 29; d >= 0; d--) {
     const day = new Date(now);
     day.setDate(now.getDate() - d);
     day.setHours(0, 0, 0, 0);
@@ -381,7 +381,7 @@ export function ProgressScreen({ memberId }) {
       const rate = history.length > 0 ? Math.round(attended / history.length * 100) : 0;
       let streak = 0;
       for (let i = history.length - 1; i >= 0; i--) { if (history[i].att) streak++; else break; }
-      return { history, attended, rate, streakLabel: streak > 0 ? `${streak}d` : '—', periodLabel: 'Last 28 days', maxCount: 1 };
+      return { history, attended, rate, streakLabel: streak > 0 ? `${streak}d` : '—', periodLabel: 'Last 30 days', maxCount: 1 };
     }
     if (view === 'month') {
       const history = buildMonthHistory(allBookings);
