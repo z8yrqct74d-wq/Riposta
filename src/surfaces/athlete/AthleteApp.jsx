@@ -321,7 +321,7 @@ function AthleteApp() {
     schedule: <ScheduleScreen memberId={memberId} bookings={upcomingBookings} onRefresh={refreshData} />,
     payments: <PaymentsScreen />,
     progress: <ProgressScreen memberId={memberId} />,
-    profile:  <ProfileScreen user={user} member={member} focusSection={profileSection} />,
+    profile:  <ProfileScreen user={user} member={member} memberId={memberId} focusSection={profileSection} onMemberUpdate={refreshData} />,
   };
 
   return (

@@ -4,7 +4,7 @@ import { WeaponGlyph, WEAPON_LABEL, Icon, Avatar, PaymentPill, VisaBadge } from 
 import { PrimaryBtn, SuccessRing } from './AthleteBook';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../../lib/supabase';
-import { cancelBooking, getMember, updateMemberCredits, getBookingsForMember, getNotesForMember } from '../../lib/db';
+import { cancelBooking, getMember, updateMemberCredits, getBookingsForMember, getNotesForMember, updateMemberDocument, uploadMemberDocument } from '../../lib/db';
 
 export function PageHead({ greeting, title }) {
   return (
@@ -422,6 +422,199 @@ export function CheckinScreen({ member }) {
   );
 }
 
+function formatDocDate(d) {
+  if (!d) return null;
+  return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function docStatusFromExpiry(expiryDate) {
+  if (!expiryDate) return 'valid';
+  const exp = new Date(expiryDate);
+  const now = new Date();
+  const soon = new Date(now.getTime() + 30 * 24 * 3600 * 1000);
+  return exp < now ? 'expired' : exp < soon ? 'expiring' : 'valid';
+}
+
+export function DocumentSheet({ type, member, memberId, onClose, onSaved }) {
+  const isMedical = type === 'medical';
+  const prefix = isMedical ? 'medical_cert' : 'federation_licence';
+  const title = isMedical ? 'Medical Certificate' : 'Federation Licence';
+
+  const [issueDate, setIssueDate] = React.useState(member?.[`${prefix}_issue_date`]?.split('T')[0] || '');
+  const [expiryDate, setExpiryDate] = React.useState(member?.[`${prefix}_expiry_date`]?.split('T')[0] || '');
+  const [licenceNumber, setLicenceNumber] = React.useState(member?.federation_licence_number || '');
+  const [existingUrl, setExistingUrl] = React.useState(member?.[`${prefix}_url`] || null);
+  const [pendingFile, setPendingFile] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState(null);
+  const fileInputRef = React.useRef(null);
+
+  const certStatus = isMedical
+    ? (expiryDate ? docStatusFromExpiry(expiryDate) : (member?.visa_status || 'valid'))
+    : docStatusFromExpiry(expiryDate);
+
+  const handleFilePick = (e) => {
+    const file = e.target.files?.[0];
+    if (file) { setPendingFile(file); setSaveError(null); }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      let url = existingUrl;
+      if (pendingFile) url = await uploadMemberDocument(memberId, type, pendingFile);
+      await updateMemberDocument(memberId, type, {
+        url,
+        issueDate: issueDate || null,
+        expiryDate: expiryDate || null,
+        ...(type === 'federation' ? { licenceNumber } : {}),
+      });
+      onSaved?.();
+      onClose();
+    } catch (err) {
+      setSaveError('Could not save — check your connection and try again.');
+    }
+    setSaving(false);
+  };
+
+  const hasDoc = existingUrl || pendingFile;
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 80, background: 'var(--paper)', display: 'flex', flexDirection: 'column', animation: 'r-slide-right 280ms var(--e-enter) both' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '52px 20px 16px', borderBottom: '1px solid var(--hairline)', background: 'var(--surface)', flexShrink: 0 }}>
+        <button onClick={onClose} className="r-focusable" style={{ width: 36, height: 36, borderRadius: 'var(--r-pill)', border: '1px solid var(--hairline)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+          <Icon name="chevL" size={18} color="var(--ink)" />
+        </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--ink)', fontFamily: 'var(--font-display)' }}>{title}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>
+            {isMedical ? 'Required for training & competition' : 'National federation registration'}
+          </div>
+        </div>
+        <VisaBadge status={certStatus} />
+      </div>
+
+      {/* Scrollable content */}
+      <div className="r-scroll" style={{ flex: 1, overflowY: 'auto', padding: '20px 16px 120px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        {/* File upload */}
+        <div>
+          <SectionLabel>Document file</SectionLabel>
+          <input ref={fileInputRef} type="file" accept="image/*,application/pdf" onChange={handleFilePick} style={{ display: 'none' }} />
+          {hasDoc ? (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: 'var(--brand-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon name="fileDoc" size={22} color="var(--brand)" />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {pendingFile ? pendingFile.name : 'Uploaded document'}
+                </div>
+                <div style={{ fontSize: 12, color: pendingFile ? 'var(--brand)' : 'var(--success)', marginTop: 2 }}>
+                  {pendingFile ? 'Ready to upload' : 'On file'}
+                </div>
+              </div>
+              <button onClick={() => fileInputRef.current?.click()} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: '1px solid var(--hairline)', background: 'transparent', borderRadius: 'var(--r-pill)', padding: '5px 10px', fontSize: 12, fontWeight: 600, color: 'var(--muted)', flexShrink: 0 }}>
+                Replace
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => fileInputRef.current?.click()} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', width: '100%', boxSizing: 'border-box', border: '2px dashed var(--hairline)', background: 'var(--surface)', borderRadius: 'var(--r-card)', padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 46, height: 46, borderRadius: 14, background: 'var(--brand-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="upload" size={24} color="var(--brand)" />
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Tap to upload</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>PDF or image (JPG, PNG)</div>
+            </button>
+          )}
+        </div>
+
+        {/* Licence number — federation only */}
+        {!isMedical && (
+          <div>
+            <SectionLabel>Licence number</SectionLabel>
+            <input
+              type="text"
+              value={licenceNumber}
+              onChange={e => setLicenceNumber(e.target.value)}
+              placeholder="e.g. FIE-ROU-12345"
+              style={{ width: '100%', boxSizing: 'border-box', background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-btn)', padding: '12px 14px', font: 'inherit', fontSize: 14, color: 'var(--ink)', outline: 'none' }}
+            />
+          </div>
+        )}
+
+        {/* Dates */}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <SectionLabel>Issue date</SectionLabel>
+            <input
+              type="date"
+              value={issueDate}
+              onChange={e => setIssueDate(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box', background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-btn)', padding: '12px 14px', font: 'inherit', fontSize: 14, color: issueDate ? 'var(--ink)' : 'var(--faint)', outline: 'none' }}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <SectionLabel>Expiry date</SectionLabel>
+            <input
+              type="date"
+              value={expiryDate}
+              onChange={e => setExpiryDate(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box', background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-btn)', padding: '12px 14px', font: 'inherit', fontSize: 14, color: expiryDate ? 'var(--ink)' : 'var(--faint)', outline: 'none' }}
+            />
+          </div>
+        </div>
+
+        {/* Summary card */}
+        {(issueDate || expiryDate) && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', overflow: 'hidden' }}>
+            <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--hairline)' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Summary</span>
+            </div>
+            {issueDate && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 14px', borderBottom: expiryDate ? '1px solid var(--hairline)' : 'none' }}>
+                <span style={{ fontSize: 13.5, color: 'var(--muted)' }}>Issued</span>
+                <span style={{ fontSize: 13.5, color: 'var(--ink)', fontWeight: 500 }}>{formatDocDate(issueDate)}</span>
+              </div>
+            )}
+            {expiryDate && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 14px' }}>
+                <span style={{ fontSize: 13.5, color: 'var(--muted)' }}>Expires</span>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: certStatus === 'expired' ? 'var(--danger)' : certStatus === 'expiring' ? 'var(--warning)' : 'var(--success)' }}>
+                  {formatDocDate(expiryDate)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {saveError && (
+          <div style={{ background: 'var(--danger-tint)', border: '1px solid var(--danger)', borderRadius: 'var(--r-card)', padding: '12px 14px', fontSize: 13.5, color: 'var(--danger)', lineHeight: 1.5 }}>
+            {saveError}
+          </div>
+        )}
+      </div>
+
+      {/* Save button */}
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '12px 16px 40px', background: 'linear-gradient(to top, var(--paper) 70%, transparent)' }}>
+        <button onClick={handleSave} disabled={saving} className="r-focusable" style={{ width: '100%', padding: 16, font: 'inherit', fontSize: 15.5, fontWeight: 600, background: saving ? 'var(--faint)' : 'var(--brand)', color: '#fff', border: 'none', borderRadius: 'var(--r-btn)', cursor: saving ? 'default' : 'pointer', boxShadow: '0 4px 16px rgba(59,111,224,0.3)', transition: 'background var(--d-fast)' }}>
+          {saving ? 'Saving…' : 'Save document'}
+        </button>
+      </div>
+
+      <style>{`
+        @keyframes r-slide-right {
+          from { transform: translateX(100%); }
+          to   { transform: translateX(0); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 function ProfileRow({ icon, label, value, accent, onTap, last }) {
   const Tag = onTap ? 'button' : 'div';
   return (
@@ -455,10 +648,11 @@ function ProfileSection({ title, children, highlight, sectionRef }) {
   );
 }
 
-export function ProfileScreen({ user, member, focusSection }) {
+export function ProfileScreen({ user, member, memberId, focusSection, onMemberUpdate }) {
   const navigate = useNavigate();
   const compRef = React.useRef(null);
   const scrollRef = React.useRef(null);
+  const [docSheet, setDocSheet] = React.useState(null); // 'medical' | 'federation' | null
 
   React.useEffect(() => {
     if (focusSection === 'compliance' && compRef.current && scrollRef.current) {
@@ -484,8 +678,11 @@ export function ProfileScreen({ user, member, focusSection }) {
     ? new Date(member.created_at).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
     : '—';
 
+  const medStatus = member?.visa_status || 'valid';
+  const fedStatus = docStatusFromExpiry(member?.federation_licence_expiry_date);
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <div style={{ padding: '52px 20px 16px', borderBottom: '1px solid var(--hairline)', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
         {avatarUrl
           ? <img src={avatarUrl} alt="" style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
@@ -503,34 +700,44 @@ export function ProfileScreen({ user, member, focusSection }) {
       <div ref={scrollRef} className="r-scroll" style={{ flex: 1, overflowY: 'auto', padding: '20px 16px 100px' }}>
         <div ref={compRef}>
           <ProfileSection title="Compliance & documents" highlight={focusSection === 'compliance'}>
-            <div style={{ padding: 14, borderBottom: '1px solid var(--hairline)' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>Medical certificate</div>
-                  <div className="r-tabular" style={{ fontSize: 12.5, color: 'var(--muted)' }}>
-                    {member?.visa_status === 'expiring' ? 'Expires soon — upload renewal' :
-                     member?.visa_status === 'expired' ? 'Expired — action required' :
-                     'Valid'}
+            {/* Medical certificate row */}
+            <button onClick={() => setDocSheet('medical')} className="r-focusable" style={{ display: 'flex', alignItems: 'center', width: '100%', padding: 14, borderBottom: '1px solid var(--hairline)', background: 'transparent', border: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 3 }}>Medical certificate</div>
+                <div className="r-tabular" style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+                  {member?.medical_cert_expiry_date
+                    ? `Expires ${formatDocDate(member.medical_cert_expiry_date)}`
+                    : medStatus === 'expired' ? 'Expired — tap to upload renewal'
+                    : medStatus === 'expiring' ? 'Expires soon — tap to upload'
+                    : 'Tap to add document'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <VisaBadge status={medStatus} />
+                <Icon name="chevR" size={16} color="var(--faint)" />
+              </div>
+            </button>
+
+            {/* Federation licence row */}
+            <button onClick={() => setDocSheet('federation')} className="r-focusable" style={{ display: 'flex', alignItems: 'center', width: '100%', padding: 14, background: 'transparent', border: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 3 }}>Federation licence</div>
+                {(member?.federation_licence_number || member?.id) && (
+                  <div className="r-mono" style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 2 }}>
+                    {member?.federation_licence_number || `FIE-ROU-${member.id.slice(0, 5).toUpperCase()}`}
                   </div>
+                )}
+                <div className="r-tabular" style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+                  {member?.federation_licence_expiry_date
+                    ? `Expires ${formatDocDate(member.federation_licence_expiry_date)}`
+                    : 'Tap to add document'}
                 </div>
-                <VisaBadge status={member?.visa_status || 'valid'} />
               </div>
-              {(member?.visa_status === 'expiring' || member?.visa_status === 'expired') && (
-                <button className="r-focusable" style={{ marginTop: 12, font: 'inherit', cursor: 'pointer', width: '100%', padding: '9px', borderRadius: 'var(--r-btn)', border: '1px solid var(--warning)', background: 'var(--warning-tint)', color: 'var(--warning)', fontSize: 13, fontWeight: 600 }}>
-                  Upload renewal
-                </button>
-              )}
-            </div>
-            <div style={{ padding: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>Federation licence</div>
-                  {member?.id && <div className="r-mono" style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 2 }}>FIE-ROU-{member.id.slice(0, 5).toUpperCase()}</div>}
-                  <div className="r-tabular" style={{ fontSize: 12.5, color: 'var(--muted)' }}>Expires 31 Dec 2026</div>
-                </div>
-                <VisaBadge status="valid" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <VisaBadge status={fedStatus} />
+                <Icon name="chevR" size={16} color="var(--faint)" />
               </div>
-            </div>
+            </button>
           </ProfileSection>
         </div>
 
@@ -556,6 +763,17 @@ export function ProfileScreen({ user, member, focusSection }) {
             : <ProfileRow icon="lock" label="Sign in" value="" accent="var(--brand)" onTap={() => navigate('/auth')} last />}
         </ProfileSection>
       </div>
+
+      {/* Document detail sheet — slides in over profile */}
+      {docSheet && (
+        <DocumentSheet
+          type={docSheet}
+          member={member}
+          memberId={memberId}
+          onClose={() => setDocSheet(null)}
+          onSaved={() => { onMemberUpdate?.(); setDocSheet(null); }}
+        />
+      )}
     </div>
   );
 }

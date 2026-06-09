@@ -183,6 +183,40 @@ export async function upsertMemberFromAuth(user) {
   return data;
 }
 
+export async function updateMemberDocument(memberId, docType, { url, issueDate, expiryDate, licenceNumber }) {
+  const prefix = docType === 'medical' ? 'medical_cert' : 'federation_licence';
+  const patch = {};
+  if (url !== undefined) patch[`${prefix}_url`] = url;
+  if (issueDate !== undefined) patch[`${prefix}_issue_date`] = issueDate || null;
+  if (expiryDate !== undefined) patch[`${prefix}_expiry_date`] = expiryDate || null;
+  if (docType === 'federation' && licenceNumber !== undefined) patch.federation_licence_number = licenceNumber;
+  if (docType === 'medical' && expiryDate !== undefined) {
+    if (!expiryDate) {
+      patch.visa_status = 'valid';
+    } else {
+      const exp = new Date(expiryDate);
+      const now = new Date();
+      const soon = new Date(now.getTime() + 30 * 24 * 3600 * 1000);
+      patch.visa_status = exp < now ? 'expired' : exp < soon ? 'expiring' : 'valid';
+    }
+  }
+  const { error } = await supabase.from('members').update(patch).eq('id', memberId);
+  if (error) throw error;
+}
+
+export async function uploadMemberDocument(memberId, docType, file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const path = `${memberId}/${docType}_${Date.now()}.${ext}`;
+  const { error } = await supabase.storage
+    .from('member-docs')
+    .upload(path, file, { upsert: true });
+  if (error) throw error;
+  const { data: { publicUrl } } = supabase.storage
+    .from('member-docs')
+    .getPublicUrl(path);
+  return publicUrl;
+}
+
 export async function getUpcomingBookings(memberId) {
   const today = new Date().toISOString().split('T')[0];
   const { data, error } = await supabase
