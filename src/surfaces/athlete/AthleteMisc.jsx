@@ -694,6 +694,103 @@ function WheelPicker({ items, value, onChange }) {
 
 // ── Shared sheet chrome ───────────────────────────────────────
 
+// ── Notifications ─────────────────────────────────────────────
+
+const NOTIF_DEFAULTS = {
+  lesson_reminders: true,
+  booking_confirm:  true,
+  cancellations:    true,
+  payment_reminders: true,
+};
+
+function readNotifPrefs() {
+  try { return JSON.parse(localStorage.getItem('riposte_notif') || 'null') || NOTIF_DEFAULTS; }
+  catch { return { ...NOTIF_DEFAULTS }; }
+}
+
+function Toggle({ on, onChange }) {
+  return (
+    <div onClick={() => onChange(!on)} style={{ width: 48, height: 28, borderRadius: 14, background: on ? 'var(--brand)' : 'var(--hairline)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background 220ms' }}>
+      <div style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 22, height: 22, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.22)', transition: 'left 220ms' }} />
+    </div>
+  );
+}
+
+const NOTIF_ITEMS = [
+  { key: 'lesson_reminders',  label: 'Lesson reminders',       sub: '1 hour before each lesson' },
+  { key: 'booking_confirm',   label: 'Booking confirmations',  sub: 'When a lesson is booked' },
+  { key: 'cancellations',     label: 'Cancellation updates',   sub: 'When a lesson is cancelled' },
+  { key: 'payment_reminders', label: 'Payment reminders',      sub: 'When a payment is due' },
+];
+
+function NotificationsSheet({ onClose }) {
+  const [prefs, setPrefs] = React.useState(readNotifPrefs);
+
+  const save = (next) => {
+    setPrefs(next);
+    localStorage.setItem('riposte_notif', JSON.stringify(next));
+  };
+
+  const allOn = Object.values(prefs).every(Boolean);
+  const anyOn = Object.values(prefs).some(Boolean);
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 80, background: 'var(--paper)', display: 'flex', flexDirection: 'column', animation: 'r-slide-right 280ms var(--e-enter) both' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '52px 20px 16px', borderBottom: '1px solid var(--hairline)', background: 'var(--surface)', flexShrink: 0 }}>
+        <button onClick={onClose} className="r-focusable" style={{ width: 36, height: 36, borderRadius: 'var(--r-pill)', border: '1px solid var(--hairline)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+          <Icon name="chevL" size={18} color="var(--ink)" />
+        </button>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--ink)', fontFamily: 'var(--font-display)' }}>Notifications</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>Choose what you want to be notified about</div>
+        </div>
+      </div>
+
+      <div className="r-scroll" style={{ flex: 1, overflowY: 'auto', padding: '20px 16px 60px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        {/* Master toggle */}
+        <div style={{ background: allOn ? 'var(--brand)' : 'var(--surface)', border: `1px solid ${allOn ? 'var(--brand)' : 'var(--hairline)'}`, borderRadius: 'var(--r-card)', padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14, transition: 'background 220ms, border-color 220ms' }}>
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: allOn ? 'rgba(255,255,255,0.18)' : 'var(--brand-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="bell" size={22} color={allOn ? '#fff' : 'var(--brand)'} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: allOn ? '#fff' : 'var(--ink)' }}>All notifications</div>
+            <div style={{ fontSize: 12.5, color: allOn ? 'rgba(255,255,255,0.75)' : 'var(--muted)', marginTop: 2 }}>{allOn ? "You’ll be notified for all events" : anyOn ? 'Some notifications are on' : 'All notifications are off'}</div>
+          </div>
+          <Toggle on={allOn} onChange={() => save(Object.fromEntries(Object.keys(prefs).map(k => [k, !allOn])))} />
+        </div>
+
+        {/* Individual toggles */}
+        <div>
+          <SectionLabel>Notification types</SectionLabel>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', overflow: 'hidden' }}>
+            {NOTIF_ITEMS.map((item, i, arr) => (
+              <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderBottom: i < arr.length - 1 ? '1px solid var(--hairline)' : 'none' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 500, color: 'var(--ink)' }}>{item.label}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>{item.sub}</div>
+                </div>
+                <Toggle on={!!prefs[item.key]} onChange={(v) => save({ ...prefs, [item.key]: v })} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Hint */}
+        <div style={{ display: 'flex', gap: 10, padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)' }}>
+          <Icon name="bell" size={16} color="var(--faint)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.55 }}>
+            Push notifications require browser permission. You may be asked to allow them the first time a notification is triggered.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Shared sheet chrome ───────────────────────────────────────
+
 function PickerSheetWrap({ title, onClose, onDone, children }) {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 70 }}>
@@ -970,6 +1067,8 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
   const [picker, setPicker] = React.useState(null); // { field, title, options, value }
   const [dobOpen, setDobOpen] = React.useState(false);
   const [emergencyOpen, setEmergencyOpen] = React.useState(false);
+  const [notifOpen, setNotifOpen] = React.useState(false);
+  const [notifPrefs, setNotifPrefs] = React.useState(readNotifPrefs);
   const [localOverrides, setLocalOverrides] = React.useState({});
 
   const mf = (field) => localOverrides[field] ?? member?.[field];
@@ -1084,7 +1183,9 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
         </ProfileSection>
 
         <ProfileSection title="Account">
-          <ProfileRow icon="bell" label="Notifications" value="On" onTap={() => {}} />
+          <ProfileRow icon="bell" label="Notifications"
+            value={(() => { const on = Object.values(notifPrefs).filter(Boolean).length; const total = NOTIF_ITEMS.length; return on === 0 ? 'Off' : on === total ? 'On' : `${on} of ${total}`; })()}
+            onTap={() => setNotifOpen(true)} />
           {user
             ? <ProfileRow icon="lock" label="Sign out" value="" accent="var(--brand)" onTap={signOut} last />
             : <ProfileRow icon="lock" label="Sign in" value="" accent="var(--brand)" onTap={() => navigate('/auth')} last />}
@@ -1109,6 +1210,11 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
           onSave={(v) => handleFieldSave('date_of_birth', v)}
           onClose={() => setDobOpen(false)}
         />
+      )}
+
+      {/* Notifications screen */}
+      {notifOpen && (
+        <NotificationsSheet onClose={() => { setNotifOpen(false); setNotifPrefs(readNotifPrefs()); }} />
       )}
 
       {/* Emergency contacts screen */}
