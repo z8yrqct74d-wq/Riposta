@@ -722,9 +722,9 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
             <button onClick={() => setDocSheet('federation')} className="r-focusable" style={{ display: 'flex', alignItems: 'center', width: '100%', padding: 14, background: 'transparent', border: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 3 }}>Federation licence</div>
-                {(member?.federation_licence_number || member?.id) && (
+                {member?.federation_licence_number && (
                   <div className="r-mono" style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 2 }}>
-                    {member?.federation_licence_number || `FIE-ROU-${member.id.slice(0, 5).toUpperCase()}`}
+                    {member.federation_licence_number}
                   </div>
                 )}
                 <div className="r-tabular" style={{ fontSize: 12.5, color: 'var(--muted)' }}>
