@@ -19,6 +19,6 @@ DO $$ BEGIN
     CREATE POLICY "ec_read"  ON emergency_contacts FOR SELECT USING (true);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'emergency_contacts' AND policyname = 'ec_write') THEN
-    CREATE POLICY "ec_write" ON emergency_contacts FOR ALL    USING (true);
+    CREATE POLICY "ec_write" ON emergency_contacts FOR ALL USING (true) WITH CHECK (true);
   END IF;
 END $$;

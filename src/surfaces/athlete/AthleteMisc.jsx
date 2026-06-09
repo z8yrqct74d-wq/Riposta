@@ -639,33 +639,129 @@ export function DocumentSheet({ type, member, memberId, onClose, onSaved }) {
   );
 }
 
-function PickerSheet({ title, options, value, onSelect, onClose }) {
+// ── Wheel picker ─────────────────────────────────────────────
+
+function WheelPicker({ items, value, onChange }) {
+  const IH = 44; // item height px
+  const PAD = 2; // invisible padding rows above/below
+  const scrollRef = React.useRef(null);
+  const timerRef  = React.useRef(null);
+
+  const scrollTo = React.useCallback((val, animate) => {
+    const idx = items.findIndex(it => it.value === val);
+    if (idx < 0 || !scrollRef.current) return;
+    if (animate) {
+      scrollRef.current.scrollTo({ top: idx * IH, behavior: 'smooth' });
+    } else {
+      scrollRef.current.scrollTop = idx * IH;
+    }
+  }, [items]);
+
+  React.useLayoutEffect(() => { scrollTo(value, false); }, []); // on mount only
+  React.useEffect(() => { scrollTo(value, false); }, [items.length]); // when list changes size
+
+  const handleScroll = () => {
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      if (!scrollRef.current) return;
+      const idx = Math.round(scrollRef.current.scrollTop / IH);
+      const clamped = Math.max(0, Math.min(idx, items.length - 1));
+      if (items[clamped]) onChange(items[clamped].value);
+    }, 80);
+  };
+
   return (
-    <BottomSheet onClose={onClose}>
-      <div style={{ padding: '0 20px 32px' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4, paddingTop: 2 }}>{title}</div>
-        <div>
-          {options.map((opt, i, arr) => (
-            <button key={opt.value} onClick={() => { onSelect(opt.value); onClose(); }} className="r-focusable" style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '14px 4px',
-              borderBottom: i < arr.length - 1 ? '1px solid var(--hairline)' : 'none',
-              background: 'transparent', border: 'none', font: 'inherit',
-              cursor: 'pointer', width: '100%', textAlign: 'left',
-            }}>
-              {opt.value === 'foil' || opt.value === 'epee' || opt.value === 'sabre'
-                ? <WeaponGlyph type={opt.value} size={20} color={value === opt.value ? 'var(--brand)' : 'var(--faint)'} />
-                : null}
-              <span style={{ flex: 1, fontSize: 16, color: value === opt.value ? 'var(--brand)' : 'var(--ink)', fontWeight: value === opt.value ? 600 : 400 }}>
-                {opt.label}
-              </span>
-              {opt.sub && <span style={{ fontSize: 12, color: 'var(--faint)' }}>{opt.sub}</span>}
-              {value === opt.value && <Icon name="check" size={18} color="var(--brand)" strokeWidth={2.5} />}
-            </button>
-          ))}
-        </div>
+    <div style={{ position: 'relative', height: IH * (PAD * 2 + 1), flex: 1, overflow: 'hidden' }}>
+      {/* centre highlight */}
+      <div style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', left: 4, right: 4, height: IH, background: 'rgba(59,111,224,0.09)', borderRadius: 10, pointerEvents: 'none', zIndex: 1 }} />
+      {/* top fade  */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: IH * PAD, background: 'linear-gradient(to bottom, var(--paper) 30%, transparent)', pointerEvents: 'none', zIndex: 2 }} />
+      {/* bottom fade */}
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: IH * PAD, background: 'linear-gradient(to top, var(--paper) 30%, transparent)', pointerEvents: 'none', zIndex: 2 }} />
+      <div ref={scrollRef} onScroll={handleScroll} style={{ height: '100%', overflowY: 'scroll', scrollSnapType: 'y mandatory', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+        <style>{`.r-wheel::-webkit-scrollbar{display:none}`}</style>
+        {Array.from({ length: PAD }).map((_, i) => <div key={`pt${i}`} style={{ height: IH }} />)}
+        {items.map(it => (
+          <div key={it.value} style={{ height: IH, display: 'flex', alignItems: 'center', justifyContent: 'center', scrollSnapAlign: 'center', fontSize: 17, fontWeight: it.value === value ? 600 : 400, color: it.value === value ? 'var(--ink)' : 'var(--muted)', userSelect: 'none', WebkitUserSelect: 'none', transition: 'color 80ms, font-weight 80ms' }}>
+            {it.label}
+          </div>
+        ))}
+        {Array.from({ length: PAD }).map((_, i) => <div key={`pb${i}`} style={{ height: IH }} />)}
       </div>
-    </BottomSheet>
+    </div>
+  );
+}
+
+// ── Shared sheet chrome ───────────────────────────────────────
+
+function PickerSheetWrap({ title, onClose, onDone, children }) {
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 70 }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', animation: 'r-scrim var(--d-base) ease both' }} />
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: 'var(--paper)', borderRadius: '20px 20px 0 0', paddingBottom: 40, animation: 'r-sheet-up 280ms var(--e-enter) both', boxShadow: '0 -8px 30px rgba(0,0,0,0.18)' }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--hairline)', margin: '10px auto 0' }} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px 10px' }}>
+          <button onClick={onClose} style={{ font: 'inherit', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15, color: 'var(--muted)', padding: '4px 0' }}>Cancel</button>
+          <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>{title}</span>
+          <button onClick={onDone}  style={{ font: 'inherit', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 700, color: 'var(--brand)', padding: '4px 0' }}>Done</button>
+        </div>
+        <div style={{ height: 1, background: 'var(--hairline)', marginBottom: 4 }} />
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── Option picker (plan / weapon / category) ──────────────────
+
+function OptionPickerSheet({ title, options, value, onSelect, onClose }) {
+  const [local, setLocal] = React.useState(value ?? options[0]?.value);
+  const items = options.map(o => ({ value: o.value, label: o.label }));
+  return (
+    <PickerSheetWrap title={title} onClose={onClose} onDone={() => { onSelect(local); onClose(); }}>
+      <div style={{ padding: '0 20px' }}>
+        <WheelPicker items={items} value={local} onChange={setLocal} />
+      </div>
+    </PickerSheetWrap>
+  );
+}
+
+// ── Date of birth picker (3-column wheel) ────────────────────
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function DatePickerSheet({ value, onSave, onClose }) {
+  const parse = (v) => {
+    if (!v) return { d: 1, m: 1, y: 2000 };
+    const [yr, mo, dy] = v.split('-').map(Number);
+    return { d: dy || 1, m: mo || 1, y: yr || 2000 };
+  };
+  const init = parse(value);
+  const [d, setD] = React.useState(init.d);
+  const [m, setM] = React.useState(init.m);
+  const [y, setY] = React.useState(init.y);
+
+  const maxDay = new Date(y, m, 0).getDate();
+  React.useEffect(() => { if (d > maxDay) setD(maxDay); }, [m, y]);
+
+  const dayItems   = Array.from({ length: maxDay }, (_, i) => ({ value: i+1, label: String(i+1).padStart(2,'0') }));
+  const monthItems = MONTH_NAMES.map((name, i) => ({ value: i+1, label: name }));
+  const yearItems  = Array.from({ length: 80 }, (_, i) => ({ value: 1945+i, label: String(1945+i) }));
+
+  const handleDone = () => {
+    const clamped = Math.min(d, maxDay);
+    onSave(`${y}-${String(m).padStart(2,'0')}-${String(clamped).padStart(2,'0')}`);
+    onClose();
+  };
+
+  return (
+    <PickerSheetWrap title="Date of birth" onClose={onClose} onDone={handleDone}>
+      <div style={{ display: 'flex', padding: '0 12px' }}>
+        <WheelPicker items={dayItems}   value={d} onChange={setD} />
+        <WheelPicker items={monthItems} value={m} onChange={setM} />
+        <WheelPicker items={yearItems}  value={y} onChange={setY} />
+      </div>
+    </PickerSheetWrap>
   );
 }
 
@@ -674,16 +770,20 @@ function AddContactSheet({ memberId, isFirst, onClose, onSaved }) {
   const [role, setRole] = React.useState('');
   const [phone, setPhone] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState(null);
   const ROLES = ['Mother', 'Father', 'Guardian', 'Spouse/Partner', 'Sibling', 'Coach', 'Other'];
   const canSave = name.trim().length > 0;
 
   const handleSave = async () => {
-    if (!canSave) return;
+    if (!canSave || !memberId) return;
     setSaving(true);
+    setError(null);
     try {
       const c = await addEmergencyContact({ member_id: memberId, name: name.trim(), role: role || null, phone: phone.trim() || null, is_primary: isFirst });
       onSaved(c);
-    } catch (e) {}
+    } catch (e) {
+      setError('Could not save — make sure you have run the latest DB migration.');
+    }
     setSaving(false);
   };
 
@@ -714,6 +814,9 @@ function AddContactSheet({ memberId, isFirst, onClose, onSaved }) {
           <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+40 700 000 000"
             style={{ width: '100%', boxSizing: 'border-box', background: 'var(--paper)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-btn)', padding: '12px 14px', font: 'inherit', fontSize: 14, color: 'var(--ink)', outline: 'none' }} />
         </div>
+        {error && (
+          <div style={{ background: 'var(--danger-tint)', border: '1px solid var(--danger)', borderRadius: 'var(--r-card)', padding: '10px 14px', fontSize: 13, color: 'var(--danger)', lineHeight: 1.5 }}>{error}</div>
+        )}
         <button onClick={handleSave} disabled={!canSave || saving} className="r-focusable" style={{
           marginTop: 4, padding: 16, font: 'inherit', fontSize: 15.5, fontWeight: 600,
           background: canSave ? 'var(--brand)' : 'var(--hairline)',
@@ -732,11 +835,15 @@ function AddContactSheet({ memberId, isFirst, onClose, onSaved }) {
 function EmergencyContactsScreen({ memberId, onClose }) {
   const [contacts, setContacts] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState(null);
   const [addOpen, setAddOpen] = React.useState(false);
 
   const load = React.useCallback(async () => {
+    if (!memberId) { setLoading(false); return; }
     setLoading(true);
-    try { setContacts(await getEmergencyContacts(memberId)); } catch (e) {}
+    setLoadError(null);
+    try { setContacts(await getEmergencyContacts(memberId)); }
+    catch (e) { setLoadError('Could not load contacts — run the latest DB migration and try again.'); }
     setLoading(false);
   }, [memberId]);
 
@@ -771,6 +878,8 @@ function EmergencyContactsScreen({ memberId, onClose }) {
               {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--brand)', opacity: 0.35, animation: `r-live-pulse 1s ease-in-out ${i*200}ms infinite` }} />)}
             </div>
           </div>
+        ) : loadError ? (
+          <div style={{ background: 'var(--danger-tint)', border: '1px solid var(--danger)', borderRadius: 'var(--r-card)', padding: '14px 16px', fontSize: 13.5, color: 'var(--danger)', lineHeight: 1.5 }}>{loadError}</div>
         ) : contacts.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '48px 16px' }}>
             <div style={{ width: 56, height: 56, borderRadius: 16, background: 'var(--surface)', border: '1px solid var(--hairline)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
@@ -859,9 +968,9 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
   const scrollRef = React.useRef(null);
   const [docSheet, setDocSheet] = React.useState(null);
   const [picker, setPicker] = React.useState(null); // { field, title, options, value }
+  const [dobOpen, setDobOpen] = React.useState(false);
   const [emergencyOpen, setEmergencyOpen] = React.useState(false);
   const [localOverrides, setLocalOverrides] = React.useState({});
-  const dobRef = React.useRef(null);
 
   const mf = (field) => localOverrides[field] ?? member?.[field];
 
@@ -967,12 +1076,7 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
         </ProfileSection>
 
         <ProfileSection title="Personal">
-          {/* Date of birth — tap triggers native date picker via hidden input */}
-          <div style={{ position: 'relative' }}>
-            <ProfileRow icon="user" label="Date of birth" value={mf('date_of_birth') ? formatDocDate(mf('date_of_birth')) : '—'} onTap={() => dobRef.current?.click()} />
-            <input ref={dobRef} type="date" value={mf('date_of_birth') || ''} onChange={e => handleFieldSave('date_of_birth', e.target.value || null)}
-              style={{ position: 'fixed', opacity: 0, top: -200, left: -200, width: 1, height: 1, pointerEvents: 'none' }} />
-          </div>
+          <ProfileRow icon="user" label="Date of birth" value={mf('date_of_birth') ? formatDocDate(mf('date_of_birth')) : '—'} onTap={() => setDobOpen(true)} />
           <ProfileRow icon="message" label="Email" value={email || '—'} />
           <ProfileRow icon="users" label="Emergency contacts"
             value={<span style={{ fontSize: 12, color: 'var(--brand)', fontWeight: 600 }}>Manage →</span>}
@@ -987,14 +1091,23 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
         </ProfileSection>
       </div>
 
-      {/* Picker sheet for plan / weapon / category */}
+      {/* Option picker — plan / weapon / category */}
       {picker && (
-        <PickerSheet
+        <OptionPickerSheet
           title={picker.title}
           options={picker.options}
           value={picker.value}
-          onSelect={(val) => handleFieldSave(picker.field, val)}
+          onSelect={(val) => { handleFieldSave(picker.field, val); setPicker(prev => ({ ...prev, value: val })); }}
           onClose={() => setPicker(null)}
+        />
+      )}
+
+      {/* Date of birth wheel picker */}
+      {dobOpen && (
+        <DatePickerSheet
+          value={mf('date_of_birth')}
+          onSave={(v) => handleFieldSave('date_of_birth', v)}
+          onClose={() => setDobOpen(false)}
         />
       )}
 
