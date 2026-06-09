@@ -241,6 +241,18 @@ export async function updateMemberDocument(memberId, docType, { url, issueDate, 
   if (error) throw error;
 }
 
+export async function uploadMemberAvatar(memberId, file) {
+  const path = `${memberId}/avatar`;
+  const { error } = await supabase.storage
+    .from('member-docs')
+    .upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' });
+  if (error) throw error;
+  const { data: { publicUrl } } = supabase.storage
+    .from('member-docs')
+    .getPublicUrl(path);
+  return `${publicUrl}?t=${Date.now()}`;
+}
+
 export async function uploadMemberDocument(memberId, docType, file) {
   const ext = file.name.split('.').pop().toLowerCase();
   const path = `${memberId}/${docType}_${Date.now()}.${ext}`;

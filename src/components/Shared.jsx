@@ -81,6 +81,8 @@ export function Icon({ name, size = 18, color = 'currentColor', strokeWidth = 1.
     upload: <g {...p}><path d="M12 15V7M8.5 10.5l3.5-3.5 3.5 3.5"/><path d="M20 15.5v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/></g>,
     fileDoc: <g {...p}><path d="M5 3.5h10l4 4V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z"/><path d="M15 3.5V7.5H19M8 11h8M8 15h5"/></g>,
     alertCircle: <g {...p}><circle cx="12" cy="12" r="8.5"/><path d="M12 8v4.5M12 15.5v.5"/></g>,
+    camera: <g {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></g>,
+    image: <g {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15.5l5-5 4 4 3-3 5 5"/><circle cx="8.5" cy="8.5" r="1.5"/></g>,
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" style={style}>{paths[name]}</svg>;
 }

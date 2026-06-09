@@ -4,7 +4,7 @@ import { WeaponGlyph, WEAPON_LABEL, Icon, Avatar, PaymentPill, VisaBadge } from 
 import { PrimaryBtn, SuccessRing } from './AthleteBook';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../../lib/supabase';
-import { cancelBooking, getMember, updateMember, updateMemberCredits, getBookingsForMember, getNotesForMember, updateMemberDocument, uploadMemberDocument, getEmergencyContacts, addEmergencyContact, setPrimaryContact, deleteEmergencyContact } from '../../lib/db';
+import { cancelBooking, getMember, updateMember, updateMemberCredits, getBookingsForMember, getNotesForMember, updateMemberDocument, uploadMemberDocument, uploadMemberAvatar, getEmergencyContacts, addEmergencyContact, setPrimaryContact, deleteEmergencyContact } from '../../lib/db';
 
 const PLAN_OPTIONS = [
   { value: 'Trial',       label: 'Trial' },
@@ -1127,6 +1127,92 @@ function EmergencyContactsScreen({ memberId, onClose }) {
   );
 }
 
+function EditAvatarSheet({ memberId, currentUrl, displayName, onClose, onSaved }) {
+  const [preview, setPreview] = React.useState(null);
+  const [file, setFile] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const cameraRef = React.useRef(null);
+  const libraryRef = React.useRef(null);
+
+  const handleFile = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+    setError(null);
+  };
+
+  const handleSave = async () => {
+    if (!file || !memberId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const url = await uploadMemberAvatar(memberId, file);
+      await updateMember(memberId, { avatar_url: url });
+      onSaved(url);
+      onClose();
+    } catch {
+      setError('Could not upload — check your connection and try again.');
+    }
+    setSaving(false);
+  };
+
+  const shownUrl = preview || currentUrl;
+
+  return (
+    <BottomSheet onClose={onClose}>
+      <div style={{ padding: '4px 20px 36px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div className="r-display" style={{ fontSize: 20, color: 'var(--ink)' }}>Profile photo</div>
+
+        {/* Preview */}
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          {shownUrl ? (
+            <img src={shownUrl} alt="" style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', border: preview ? '3px solid var(--brand)' : '2px solid var(--hairline)', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', transition: 'border-color var(--d-fast)' }} />
+          ) : (
+            <Avatar name={displayName} size={100} />
+          )}
+        </div>
+
+        <input ref={cameraRef} type="file" accept="image/*" capture="user" onChange={handleFile} style={{ display: 'none' }} />
+        <input ref={libraryRef} type="file" accept="image/*" onChange={handleFile} style={{ display: 'none' }} />
+
+        {!preview ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button onClick={() => cameraRef.current?.click()} className="r-focusable" style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', padding: '14px 16px', background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', font: 'inherit', cursor: 'pointer', fontSize: 15, fontWeight: 500, color: 'var(--ink)', textAlign: 'left' }}>
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--brand-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon name="camera" size={20} color="var(--brand)" />
+              </div>
+              <span style={{ flex: 1 }}>Take a photo</span>
+              <Icon name="chevR" size={16} color="var(--faint)" />
+            </button>
+            <button onClick={() => libraryRef.current?.click()} className="r-focusable" style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', padding: '14px 16px', background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', font: 'inherit', cursor: 'pointer', fontSize: 15, fontWeight: 500, color: 'var(--ink)', textAlign: 'left' }}>
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--steel-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon name="image" size={20} color="var(--steel)" />
+              </div>
+              <span style={{ flex: 1 }}>Choose from library</span>
+              <Icon name="chevR" size={16} color="var(--faint)" />
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button onClick={handleSave} disabled={saving} className="r-focusable" style={{ width: '100%', padding: 16, font: 'inherit', fontSize: 15.5, fontWeight: 600, background: saving ? 'var(--faint)' : 'var(--brand)', color: '#fff', border: 'none', borderRadius: 'var(--r-btn)', cursor: saving ? 'default' : 'pointer', boxShadow: '0 4px 16px rgba(59,111,224,0.3)', transition: 'background var(--d-fast)' }}>
+              {saving ? 'Uploading…' : 'Save photo'}
+            </button>
+            <button onClick={() => { setPreview(null); setFile(null); }} className="r-focusable" style={{ width: '100%', padding: 14, font: 'inherit', fontSize: 15, fontWeight: 600, background: 'transparent', color: 'var(--muted)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-btn)', cursor: 'pointer' }}>
+              Choose again
+            </button>
+          </div>
+        )}
+
+        {error && (
+          <div style={{ background: 'var(--danger-tint)', border: '1px solid var(--danger)', borderRadius: 'var(--r-card)', padding: '10px 14px', fontSize: 13, color: 'var(--danger)', lineHeight: 1.5 }}>{error}</div>
+        )}
+      </div>
+    </BottomSheet>
+  );
+}
+
 function ProfileRow({ icon, label, value, accent, onTap, last }) {
   const Tag = onTap ? 'button' : 'div';
   return (
@@ -1169,6 +1255,7 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
   const [dobOpen, setDobOpen] = React.useState(false);
   const [emergencyOpen, setEmergencyOpen] = React.useState(false);
   const [notifOpen, setNotifOpen] = React.useState(false);
+  const [editAvatarOpen, setEditAvatarOpen] = React.useState(false);
   const [notifPrefs, setNotifPrefs] = React.useState(readNotifPrefs);
   const [localOverrides, setLocalOverrides] = React.useState({});
 
@@ -1196,7 +1283,7 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
 
   const displayName = user?.user_metadata?.full_name || member?.name || 'Guest';
   const email = user?.email || member?.email || '';
-  const avatarUrl = user?.user_metadata?.avatar_url;
+  const avatarUrl = localOverrides.avatar_url ?? member?.avatar_url ?? user?.user_metadata?.avatar_url;
   const weaponLabel = member?.weapon
     ? member.weapon.charAt(0).toUpperCase() + member.weapon.slice(1)
     : null;
@@ -1220,7 +1307,7 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
           </div>
           {member?.id && <div className="r-mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3, letterSpacing: '0.04em' }}>MBR-{member.id.slice(0, 5).toUpperCase()}</div>}
         </div>
-        <button className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: '1px solid var(--hairline)', background: 'transparent', borderRadius: 'var(--r-btn)', padding: '6px 12px', fontSize: 13, fontWeight: 600, color: 'var(--muted)', flexShrink: 0 }}>Edit</button>
+        <button onClick={() => setEditAvatarOpen(true)} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: '1px solid var(--hairline)', background: 'transparent', borderRadius: 'var(--r-btn)', padding: '6px 12px', fontSize: 13, fontWeight: 600, color: 'var(--muted)', flexShrink: 0 }}>Edit</button>
       </div>
 
       <div ref={scrollRef} className="r-scroll" style={{ flex: 1, overflowY: 'auto', padding: '20px 16px 100px' }}>
@@ -1321,6 +1408,20 @@ export function ProfileScreen({ user, member, memberId, focusSection, onMemberUp
       {/* Emergency contacts screen */}
       {emergencyOpen && (
         <EmergencyContactsScreen memberId={memberId} onClose={() => setEmergencyOpen(false)} />
+      )}
+
+      {/* Edit avatar sheet */}
+      {editAvatarOpen && (
+        <EditAvatarSheet
+          memberId={memberId}
+          currentUrl={avatarUrl}
+          displayName={displayName}
+          onClose={() => setEditAvatarOpen(false)}
+          onSaved={(url) => {
+            setLocalOverrides(prev => ({ ...prev, avatar_url: url }));
+            onMemberUpdate?.();
+          }}
+        />
       )}
 
       {/* Document detail sheet — slides in over profile */}
