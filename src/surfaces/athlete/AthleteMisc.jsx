@@ -21,13 +21,14 @@ const WEAPON_OPTIONS = [
 ];
 
 const CATEGORY_OPTIONS = [
-  { value: 'U11',          label: 'Under 11',     sub: 'U11' },
-  { value: 'U14',          label: 'Under 14',     sub: 'U14' },
-  { value: 'U17',          label: 'Under 17',     sub: 'U17' },
-  { value: 'U20',          label: 'Under 20',     sub: 'U20' },
-  { value: 'Senior',       label: 'Senior' },
-  { value: 'Veteran',      label: 'Veteran' },
-  { value: 'Recreational', label: 'Recreational' },
+  { value: 'U9',      label: 'Under 9',  sub: 'U9' },
+  { value: 'U11',     label: 'Under 11', sub: 'U11' },
+  { value: 'U14',     label: 'Under 14', sub: 'U14' },
+  { value: 'U17',     label: 'Under 17', sub: 'U17' },
+  { value: 'U20',     label: 'Under 20', sub: 'U20' },
+  { value: 'Senior',  label: 'Senior' },
+  { value: 'Veteran', label: 'Veteran' },
+  { value: 'Amateur', label: 'Amateur' },
 ];
 
 export function PageHead({ greeting, title }) {
