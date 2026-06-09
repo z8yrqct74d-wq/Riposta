@@ -1,6 +1,14 @@
 import React from 'react';
 import { Icon, Avatar, WeaponGlyph } from '../../components/Shared';
 import { BottomSheet } from '../athlete/AthleteMisc';
+import {
+  getMembers,
+  getSessionAttendance,
+  upsertSessionAttendance,
+  updateMemberCredits,
+  saveNote,
+  updateBookingAttendance,
+} from '../../lib/db';
 
 export const ATT_STATES = [
   { id: 'present', label: 'Present', color: 'var(--success)' },
@@ -36,15 +44,6 @@ export function AttToggle({ value, onChange }) {
   );
 }
 
-export const ROSTER = [
-  { id: 1, name: 'Maya Rocha', cat: 'U17', weapon: 'foil' },
-  { id: 2, name: 'Tomas Király', cat: 'Senior', weapon: 'epee' },
-  { id: 3, name: 'Léa Bernard', cat: 'U14', weapon: 'sabre' },
-  { id: 4, name: 'Hugo Almeida', cat: 'Senior', weapon: 'foil' },
-  { id: 5, name: 'Sofia Marin', cat: 'U14', weapon: 'sabre' },
-  { id: 6, name: 'Noah Klein', cat: 'U11', weapon: 'foil' },
-];
-
 export function CoachHeader({ onBack, title, sub, weapon, live }) {
   return (
     <div style={{ flexShrink: 0, padding: '56px 16px 12px', borderBottom: '1px solid var(--hairline)', background: 'var(--surface)' }}>
@@ -78,22 +77,85 @@ function DropInSheet({ onClose, onAdd }) {
   );
 }
 
-export function SessionAttendance({ onBack, onDone }) {
-  const [att, setAtt] = React.useState({ 1: 'present', 2: 'present' });
-  const [roster, setRoster] = React.useState(ROSTER);
+export function SessionAttendance({ item, coach, onBack, onDone }) {
+  const [att, setAtt] = React.useState({});
+  const [members, setMembers] = React.useState([]);
+  const [dropIns, setDropIns] = React.useState([]);
   const [sheet, setSheet] = React.useState(false);
-  const marked = Object.keys(att).length;
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+
+  const today = new Date().toISOString().split('T')[0];
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [allMembers, existing] = await Promise.all([
+          getMembers(),
+          item?.blockId ? getSessionAttendance(item.blockId, today) : Promise.resolve([]),
+        ]);
+        if (cancelled) return;
+        const existingAtt = {};
+        (existing || []).forEach(r => { if (r.member_id) existingAtt[r.member_id] = r.status; });
+        setMembers(allMembers || []);
+        setAtt(existingAtt);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [item?.blockId]);
 
   const addDropIn = (name) => {
-    const id = Date.now();
-    setRoster(r => [...r, { id, name, cat: 'Drop-in', weapon: 'foil', dropin: true }]);
+    const id = `dropin_${Date.now()}`;
+    setDropIns(d => [...d, { id, name, category: 'Drop-in', weapon: 'foil', dropin: true }]);
     setAtt(a => ({ ...a, [id]: 'present' }));
     setSheet(false);
   };
 
+  const handleDone = async () => {
+    setSaving(true);
+    try {
+      await Promise.all(
+        members
+          .filter(m => att[m.id])
+          .map(m => upsertSessionAttendance({
+            block_id: item.blockId,
+            session_date: today,
+            member_id: m.id,
+            status: att[m.id],
+            is_dropin: false,
+          }))
+      );
+    } catch (e) {
+      console.error(e);
+    }
+    setSaving(false);
+    onDone?.();
+  };
+
+  const roster = [...members, ...dropIns];
+  const marked = Object.keys(att).length;
+  const pistePart = item?.piste ? ` · Piste ${item.piste}` : '';
+  const sub = item ? `${item.t}${pistePart} · ${item.durMin} min` : '';
+
+  if (loading) {
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
+        <CoachHeader onBack={onBack} title={item?.title || 'Session'} sub={sub} weapon={item?.weapon} live={item?.live} />
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {[1, 2, 3, 4].map(i => <div key={i} className="r-skeleton" style={{ height: 80, borderRadius: 'var(--r-card)' }} />)}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
-      <CoachHeader onBack={onBack} title="Sabre squad" sub="18:00 · Piste 3 · 90 min" weapon="sabre" live />
+      <CoachHeader onBack={onBack} title={item?.title || 'Session'} sub={sub} weapon={item?.weapon} live={item?.live} />
       <div style={{ padding: '10px 16px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>{marked} of {roster.length} marked</span>
         <button onClick={() => setSheet(true)} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, background: 'transparent', border: '1px solid var(--hairline)', color: 'var(--ink)', borderRadius: 'var(--r-pill)', padding: '5px 11px', fontSize: 12.5, fontWeight: 600 }}>
@@ -102,15 +164,15 @@ export function SessionAttendance({ onBack, onDone }) {
       </div>
       <div className="r-scroll" style={{ flex: 1, overflowY: 'auto', padding: '6px 16px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {roster.map((p, i) => (
-          <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 12, animation: `r-rise var(--d-base) var(--e-enter) ${i*40}ms both` }}>
+          <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 12, animation: `r-rise var(--d-base) var(--e-enter) ${i * 40}ms both` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <Avatar name={p.name} size={34} />
+              <Avatar name={p.name} src={p.avatar_url} size={34} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                   <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{p.name}</span>
-                  <WeaponGlyph type={p.weapon} size={15} />
+                  {p.weapon && <WeaponGlyph type={p.weapon} size={15} />}
                 </div>
-                <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 1 }}>{p.cat}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 1 }}>{p.category}</div>
               </div>
               {p.dropin && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--steel)', background: 'var(--steel-tint)', padding: '2px 7px', borderRadius: 'var(--r-pill)' }}>NEW</span>}
             </div>
@@ -119,41 +181,62 @@ export function SessionAttendance({ onBack, onDone }) {
         ))}
       </div>
       <div style={{ flexShrink: 0, padding: '12px 16px 30px', borderTop: '1px solid var(--hairline)', background: 'var(--surface)' }}>
-        <button onClick={onDone} className="r-focusable" style={{ width: '100%', padding: 15, borderRadius: 'var(--r-btn)', border: 'none', background: 'var(--brand)', color: '#fff', font: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer', minHeight: 50 }}>Done · {marked} marked</button>
+        <button onClick={handleDone} disabled={saving} className="r-focusable" style={{ width: '100%', padding: 15, borderRadius: 'var(--r-btn)', border: 'none', background: 'var(--brand)', color: '#fff', font: 'inherit', fontSize: 15, fontWeight: 600, cursor: saving ? 'default' : 'pointer', minHeight: 50, opacity: saving ? 0.7 : 1 }}>
+          {saving ? 'Saving…' : `Done · ${marked} marked`}
+        </button>
       </div>
       {sheet && <DropInSheet onClose={() => setSheet(false)} onAdd={addDropIn} />}
     </div>
   );
 }
 
-export function LessonView({ onBack }) {
-  const [credits, setCredits] = React.useState(5);
+export function LessonView({ item, coach, onBack }) {
+  const memberName = item?.memberName || item?.title || 'Athlete';
+  const memberWeapon = item?.weapon || 'foil';
+  const memberCat = item?.memberCat || '';
+  const [credits, setCredits] = React.useState(item?.memberCredits ?? 0);
   const [done, setDone] = React.useState(false);
   const [showMinus, setShowMinus] = React.useState(false);
   const [note, setNote] = React.useState('');
   const [tidied, setTidied] = React.useState(false);
   const [tidying, setTidying] = React.useState(false);
 
+  const pistePart = item?.piste ? ` · Piste ${item.piste}` : '';
+  const sub = item ? `${item.t}${pistePart} · ${item.durMin} min` : '';
+
   const markDone = () => {
     setDone(true);
     setTimeout(() => setShowMinus(true), 120);
-    setTimeout(() => setCredits(4), 360);
+    setTimeout(() => setCredits(c => Math.max(0, c - 1)), 360);
+    if (item?.memberId) {
+      updateMemberCredits(item.memberId, Math.max(0, (item.memberCredits ?? 1) - 1)).catch(console.error);
+    }
+    if (item?.bookingId) {
+      updateBookingAttendance(item.bookingId, 'present').catch(console.error);
+    }
   };
+
   const tidy = () => {
+    if (!note.trim()) return;
     setTidying(true);
+    if (item?.memberId && coach?.id) {
+      saveNote({ member_id: item.memberId, coach_id: coach.id, raw_note: note }).catch(console.error);
+    }
     setTimeout(() => { setTidying(false); setTidied(true); }, 900);
   };
 
+  const weaponLabel = memberWeapon.charAt(0).toUpperCase() + memberWeapon.slice(1);
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
-      <CoachHeader onBack={onBack} title="Maya Rocha" sub="18:00 · Piste 3 · 45 min" weapon="foil" />
+      <CoachHeader onBack={onBack} title={memberName} sub={sub} weapon={memberWeapon} live={item?.live} />
       <div className="r-scroll" style={{ flex: 1, overflowY: 'auto', padding: '8px 16px 24px' }}>
         <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Avatar name="Maya Rocha" size={40} />
+            <Avatar name={memberName} size={40} />
             <div>
               <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Individual lesson</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>Foil · U17</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>{weaponLabel}{memberCat ? ` · ${memberCat}` : ''}</div>
             </div>
           </div>
           <div style={{ position: 'relative', textAlign: 'right' }}>

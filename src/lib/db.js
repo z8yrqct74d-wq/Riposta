@@ -158,6 +158,94 @@ export async function getCoaches() {
   return data;
 }
 
+export async function getCoachByEmail(email) {
+  const { data, error } = await supabase
+    .from('coaches')
+    .select('*')
+    .ilike('email', email)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateCoachAvailability(coachId, json) {
+  const { error } = await supabase
+    .from('coaches')
+    .update({ availability_json: json })
+    .eq('id', coachId);
+  if (error) throw error;
+}
+
+export async function getBookingsForCoachOnDate(coachId, dateStr) {
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('*, members(name, weapon, category, credits, avatar_url)')
+    .eq('coach_id', coachId)
+    .eq('slot_date', dateStr)
+    .eq('status', 'booked')
+    .order('slot_time');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getCoachWeekStats(coachId) {
+  const today = new Date();
+  const dow = (today.getDay() + 6) % 7;
+  const mon = new Date(today);
+  mon.setDate(today.getDate() - dow);
+  const monStr = mon.toISOString().split('T')[0];
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  const sunStr = sun.toISOString().split('T')[0];
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('id, attendance_status')
+    .eq('coach_id', coachId)
+    .gte('slot_date', monStr)
+    .lte('slot_date', sunStr)
+    .eq('status', 'booked');
+  if (error) throw error;
+  const lessons = data?.length || 0;
+  const present = data?.filter(b => b.attendance_status === 'present' || b.attendance_status === 'late').length || 0;
+  const att = lessons > 0 ? Math.round(present / lessons * 100) : 0;
+  return { lessons, att };
+}
+
+export async function getAllBookingsLight() {
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('member_id, slot_date, status')
+    .neq('status', 'cancelled');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getSessionAttendance(blockId, dateStr) {
+  const { data, error } = await supabase
+    .from('session_attendance')
+    .select('*')
+    .eq('block_id', blockId)
+    .eq('session_date', dateStr);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function upsertSessionAttendance(record) {
+  const { error } = await supabase
+    .from('session_attendance')
+    .upsert(record, { onConflict: 'block_id,session_date,member_id' });
+  if (error) throw error;
+}
+
+export async function updateBookingAttendance(bookingId, status) {
+  const { error } = await supabase
+    .from('bookings')
+    .update({ attendance_status: status })
+    .eq('id', bookingId);
+  if (error) throw error;
+}
+
+
 // ── Auth helpers ──────────────────────────────────────────────
 
 export async function getMemberByEmail(email) {
