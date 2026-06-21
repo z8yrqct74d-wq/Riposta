@@ -36,7 +36,7 @@ function FencerHero() {
   );
 }
 
-const FEATURES = [
+const ATHLETE_FEATURES = [
   {
     icon: 'calendar',
     color: 'var(--brand)',
@@ -60,13 +60,40 @@ const FEATURES = [
   },
 ];
 
-// Exactly 4 screens: welcome, features, role, login
+const COACH_FEATURES = [
+  {
+    icon: 'calendar',
+    color: 'var(--brand)',
+    bg: 'var(--brand-tint)',
+    label: 'Run your day',
+    sub: 'See every lesson and session on your schedule at a glance.',
+  },
+  {
+    icon: 'users',
+    color: 'var(--steel)',
+    bg: 'var(--steel-tint)',
+    label: 'Mark attendance',
+    sub: 'Track who showed up and tidy lesson notes in seconds.',
+  },
+  {
+    icon: 'clock',
+    color: 'var(--success)',
+    bg: 'var(--success-tint)',
+    label: 'Set availability',
+    sub: 'Choose your open slots — athletes book around them.',
+  },
+];
+
+// Exactly 4 screens: welcome, role, features, login
 const N_TOTAL = 4;
 
 export function AthleteOnboarding({ onContinue }) {
   const [step, setStep] = React.useState(0);
   const [signingIn, setSigningIn] = React.useState(false);
   const [role, setRole] = React.useState('athlete');
+
+  const isCoach = role === 'coach';
+  const features = isCoach ? COACH_FEATURES : ATHLETE_FEATURES;
 
   const isDark = step === 0;
   const isLogin = step === 3;
@@ -135,46 +162,7 @@ export function AthleteOnboarding({ onContinue }) {
           </div>
         </div>
 
-        {/* ── Screen 2 of 3: Features ────────────────────────── */}
-        <div style={{
-          width: panelW, height: '100%',
-          background: 'var(--paper)',
-          display: 'flex', flexDirection: 'column',
-          padding: '64px 24px 160px',
-        }}>
-          {/* Header */}
-          <div style={{ marginBottom: 28 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>What's inside</div>
-            <h2 className="r-display" style={{ fontSize: 34, color: 'var(--ink)', margin: 0, lineHeight: 1.1 }}>
-              Everything<br />you need.
-            </h2>
-          </div>
-
-          {/* Feature cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {FEATURES.map((f, i) => (
-              <div key={f.label} style={{
-                background: 'var(--surface)', border: '1px solid var(--hairline)',
-                borderRadius: 16, padding: '14px 16px',
-                display: 'flex', gap: 14, alignItems: 'center',
-                animation: `r-rise var(--d-base) var(--e-enter) ${i * 70}ms both`,
-              }}>
-                <div style={{
-                  width: 46, height: 46, borderRadius: 13, flexShrink: 0,
-                  background: f.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <Icon name={f.icon} size={23} color={f.color} strokeWidth={1.8} />
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>{f.label}</div>
-                  <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2, lineHeight: 1.45 }}>{f.sub}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Screen 3 of 4: Role choice ─────────────────────── */}
+        {/* ── Screen 2 of 4: Role choice ─────────────────────── */}
         <div style={{
           width: panelW, height: '100%',
           background: 'var(--paper)',
@@ -220,6 +208,45 @@ export function AthleteOnboarding({ onContinue }) {
           </div>
         </div>
 
+        {/* ── Screen 3 of 4: Features ────────────────────────── */}
+        <div style={{
+          width: panelW, height: '100%',
+          background: 'var(--paper)',
+          display: 'flex', flexDirection: 'column',
+          padding: '64px 24px 160px',
+        }}>
+          {/* Header */}
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>What's inside</div>
+            <h2 className="r-display" style={{ fontSize: 34, color: 'var(--ink)', margin: 0, lineHeight: 1.1 }}>
+              Everything<br />you need.
+            </h2>
+          </div>
+
+          {/* Feature cards */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {features.map((f, i) => (
+              <div key={f.label} style={{
+                background: 'var(--surface)', border: '1px solid var(--hairline)',
+                borderRadius: 16, padding: '14px 16px',
+                display: 'flex', gap: 14, alignItems: 'center',
+                animation: `r-rise var(--d-base) var(--e-enter) ${i * 70}ms both`,
+              }}>
+                <div style={{
+                  width: 46, height: 46, borderRadius: 13, flexShrink: 0,
+                  background: f.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Icon name={f.icon} size={23} color={f.color} strokeWidth={1.8} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>{f.label}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2, lineHeight: 1.45 }}>{f.sub}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* ── Screen 4 of 4: Login ───────────────────────────── */}
         <div style={{
           width: panelW, height: '100%',
@@ -249,7 +276,9 @@ export function AthleteOnboarding({ onContinue }) {
               Let's get<br />started.
             </h1>
             <p style={{ fontSize: 15, color: 'var(--muted)', lineHeight: 1.6, margin: 0, maxWidth: 280 }}>
-              Sign in to save your bookings, track your progress, and check in at the salle.
+              {isCoach
+                ? 'Sign in to manage your schedule, mark attendance, and set your availability.'
+                : 'Sign in to save your bookings, track your progress, and check in at the salle.'}
             </p>
           </div>
         </div>
