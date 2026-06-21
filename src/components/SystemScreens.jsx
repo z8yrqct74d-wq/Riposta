@@ -1,7 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Browser } from '@capacitor/browser';
 import { Icon } from './Shared';
 import { supabase } from '../lib/supabase';
+import { isNative, NATIVE_REDIRECT } from '../lib/native';
 
 function GoogleLogo() {
   return (
@@ -32,10 +34,18 @@ export function AuthApp() {
 
   const signIn = async (provider) => {
     setLoading(provider);
-    await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: window.location.origin + '/auth/callback' },
-    });
+    if (isNative()) {
+      const { data } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: NATIVE_REDIRECT, skipBrowserRedirect: true },
+      });
+      if (data?.url) await Browser.open({ url: data.url });
+    } else {
+      await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: window.location.origin + '/auth/callback' },
+      });
+    }
   };
 
   return (

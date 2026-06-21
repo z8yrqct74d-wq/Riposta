@@ -1,7 +1,9 @@
 import React from 'react';
+import { Browser } from '@capacitor/browser';
 import { supabase } from '../../lib/supabase';
 import { RiposteLogo } from '../../components/SystemScreens';
 import { Icon } from '../../components/Shared';
+import { isNative, NATIVE_REDIRECT } from '../../lib/native';
 
 function GoogleLogo() {
   return (
@@ -103,12 +105,19 @@ export function AthleteOnboarding({ onContinue }) {
 
   const handleSignIn = async () => {
     setSigningIn(true);
-    // Hint only — the backend (coaches table) decides the real role on callback.
     sessionStorage.setItem('auth_role_hint', role);
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin + '/auth/callback' },
-    });
+    if (isNative()) {
+      const { data } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: NATIVE_REDIRECT, skipBrowserRedirect: true },
+      });
+      if (data?.url) await Browser.open({ url: data.url });
+    } else {
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin + '/auth/callback' },
+      });
+    }
   };
 
   const panelW = `${100 / N_TOTAL}%`;

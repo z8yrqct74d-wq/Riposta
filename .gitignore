@@ -3,3 +3,6 @@ dist/
 .DS_Store
 *.local
 .env
+
+# Capacitor — commit ios/ so Xcode signing/settings persist across machines.
+android/
