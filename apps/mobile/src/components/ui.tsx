@@ -133,6 +133,17 @@ export function Screen({ children, scroll = false, padded = true, style }: Scree
   );
 }
 
+// ── Avatar ───────────────────────────────────────────────────
+export function Avatar({ name = '', size = 32 }: { name?: string; size?: number }) {
+  const t = useTheme();
+  const initials = name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: t.colors.steelTint, borderWidth: StyleSheet.hairlineWidth, borderColor: t.colors.hairline, alignItems: 'center', justifyContent: 'center' }}>
+      <Text color={t.colors.steel} weight="600" size={size * 0.4}>{initials}</Text>
+    </View>
+  );
+}
+
 // ── ColorBarRow ──────────────────────────────────────────────
 // Surface card with a colored accent bar down the left edge.
 export function ColorBarRow({ bar, children, style }: { bar: string; children: React.ReactNode; style?: ViewStyle }) {
