@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Riposte",
+    "slug": "riposte",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "riposte",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ro.sportriposta.riposte"
+    },
+    "android": {
+      "package": "ro.sportriposta.riposte",
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}

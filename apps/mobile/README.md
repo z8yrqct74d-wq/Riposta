@@ -1,18 +1,38 @@
 # @riposte/mobile
 
-Placeholder for the Riposte **athlete + coach** app — a real React Native
-(Expo, managed, TypeScript) application, replacing the Capacitor web wrapper.
+Riposte **athlete + coach** app — Expo (React Native, managed, TypeScript),
+built on the shared [`@riposte/core`](../../packages/core) package.
 
-Scaffolded in **Phase 2** of the rewrite (see the migration plan):
+## Stack
 
-- `create-expo-app` + `expo-router` (file-based navigation)
-- `ThemeProvider` from [`@riposte/core`](../../packages/core) tokens
-  (`light` for athlete, `dark` for coach)
-- Styled primitives (`Text`, `Card`, `Button`, `Pill`, `Screen`, `Sheet`)
-- Icon set / `WeaponGlyph` / `RiposteLogo` ported to `react-native-svg`
-- Auth: `@supabase/supabase-js` + AsyncStorage, Google OAuth via
-  `expo-web-browser` + `expo-auth-session` (PKCE, `riposte://` scheme),
-  role routing via `resolveUserRole` from core
+- **expo-router** (file-based navigation) — `app/`
+- **Theme**: `ThemeProvider` from core tokens — `light` for athlete, `dark`
+  for coach (`src/theme/theme.tsx`)
+- **Primitives**: `Text` / `Card` / `Button` / `Pill` / `Screen` / `Sheet`
+  (`src/components/ui.tsx`)
+- **Icons**: the 35-icon set + `WeaponGlyph` + `RiposteLogo` ported to
+  `react-native-svg` (`src/components/`)
+- **Auth**: `@supabase/supabase-js` + AsyncStorage; Google OAuth via
+  `expo-web-browser` + `expo-auth-session` (PKCE, `riposte://` deep link),
+  role routing via `resolveUserRole` from core (`src/auth/AuthProvider.tsx`)
 
-The athlete/coach source to port from lives in `../../_reference/` once
-Phase 1 relocates it there.
+## Routes
+
+```
+app/
+  _layout.tsx        SafeAreaProvider + AuthProvider + Stack
+  index.tsx          redirect by auth/role → sign-in | (athlete) | (coach)
+  sign-in.tsx        Google sign-in (athlete / coach hint)
+  (athlete)/         light theme — Phase 3 builds the full surface
+  (coach)/           dark theme  — Phase 4 builds the full surface
+```
+
+## Running
+
+```sh
+cp .env.example .env    # fill in EXPO_PUBLIC_SUPABASE_URL / _ANON_KEY
+npm --workspace @riposte/mobile run start
+```
+
+App icons/splash are added with real branding in Phase 7. Phases 3–4 port the
+athlete/coach surfaces from `../../_reference/`.
