@@ -168,7 +168,7 @@ riposte/
 - [x] **Phase 0** — monorepo + `@riposte/core` (commit `a1ac8e2`)
 - [x] **Phase 1a** — admin split into `apps/admin` + `AdminGate` (`2706b8f`)
 - [x] **Phase 1b** — admin screens wired + Phase 6 backend tables (`6f0062e`)
-- [ ] **Phase 2** — Expo mobile scaffold (theme, nav, auth, icons)
+- [x] **Phase 2** — Expo mobile scaffold (theme, nav, auth, icons) — typechecks
 - [ ] **Phase 3** — port athlete surface
 - [ ] **Phase 4** — port coach surface
 - [ ] **Phase 5** — security hardening (RLS + auth linkage)

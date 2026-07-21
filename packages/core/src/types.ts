@@ -135,11 +135,14 @@ export interface SessionAttendanceRecord {
   created_at?: string;
 }
 
-/** Minimal shape of the authenticated user we read from Supabase Auth. */
+/**
+ * Minimal shape of the authenticated user we read from Supabase Auth.
+ * Structurally compatible with supabase-js's `User` (no catch-all index
+ * signature, so `User` is directly assignable).
+ */
 export interface AuthUserLike {
   email?: string | null;
-  user_metadata?: { full_name?: string; [k: string]: unknown } | null;
-  [k: string]: unknown;
+  user_metadata?: { full_name?: string } | null;
 }
 
 export interface RoleResolution {
