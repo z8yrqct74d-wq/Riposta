@@ -1,0 +1,9 @@
+{
+  "name": "@riposte/mobile",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Riposte athlete + coach app (Expo / React Native). Placeholder — scaffolded in Phase 2.",
+  "dependencies": {
+    "@riposte/core": "*"
+  }
+}
