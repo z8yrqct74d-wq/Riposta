@@ -1,0 +1,44 @@
+// Thin named-export shim so the admin screens can keep importing
+// `from '../../lib/db'` as before. Every function is a closure over the
+// shared client built in ./core — no `this` binding, safe to destructure.
+import { db, auth } from './core';
+
+export const {
+  getMembers,
+  getMember,
+  updateMemberCredits,
+  updateMember,
+  getCalendarBlocks,
+  createCalendarBlock,
+  updateCalendarBlock,
+  deleteCalendarBlock,
+  getBookingsForMember,
+  createBooking,
+  cancelBooking,
+  getUpcomingBookings,
+  saveNote,
+  getNotesForMember,
+  getCoaches,
+  updateCoachAvailability,
+  getBookingsForCoachOnDate,
+  getCoachWeekStats,
+  getAllBookingsLight,
+  getSessionAttendance,
+  upsertSessionAttendance,
+  updateBookingAttendance,
+  getEmergencyContacts,
+  addEmergencyContact,
+  setPrimaryContact,
+  deleteEmergencyContact,
+  updateMemberDocument,
+  uploadMemberAvatar,
+  uploadMemberDocument,
+} = db;
+
+export const {
+  resolveUserRole,
+  getCoachByEmail,
+  getMemberByEmail,
+  getAdminByEmail,
+  upsertMemberFromAuth,
+} = auth;
