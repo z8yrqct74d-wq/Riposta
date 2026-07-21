@@ -1,7 +1,7 @@
 import React from 'react';
 import { WeaponGlyph, WEAPON_LABEL, Icon, Avatar, PaymentPill, VisaBadge, WeaponChip } from '../../components/Shared';
-import { KIND } from '../../data/adminData';
-import { getMembers } from '../../lib/db';
+import { KIND, COACH, fmtTime } from '../../data/adminData';
+import { getMembers, getCalendarBlocks, getCoaches } from '../../lib/db';
 
 export function StatCard({ children, style }) {
   return <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 18, ...style }}>{children}</div>;
@@ -12,23 +12,65 @@ export function CardLabel({ children, accent, style }) {
 }
 
 export function AdminDashboard({ onGotoCalendar, onGotoMembers }) {
-  const timeline = [
-    { t: '16:30', title: 'Sabre · U14',  piste: 'Main Room', weapon: 'sabre', kind: 'group',  done: true },
-    { t: '18:00', title: 'Sabre squad',  piste: 'Main Room', weapon: 'sabre', kind: 'group',  live: true },
-    { t: '18:00', title: 'Maya Rocha',   piste: 'Main Room', weapon: 'sabre', kind: 'lesson' },
-    { t: '19:30', title: 'Tomas Király', piste: 'Main Room', weapon: 'sabre', kind: 'lesson' },
-    { t: '20:30', title: 'Léa Bernard',  piste: 'Main Room', weapon: 'sabre', kind: 'lesson' },
-  ];
   const [hovRow, setHovRow] = React.useState(null);
+  const [members, setMembers] = React.useState([]);
+  const [blocks, setBlocks] = React.useState([]);
+  const [coaches, setCoaches] = React.useState([]);
+
+  React.useEffect(() => {
+    getMembers().then(setMembers).catch(() => {});
+    getCalendarBlocks().then(setBlocks).catch(() => {});
+    getCoaches().then(setCoaches).catch(() => {});
+  }, []);
+
+  const coachName = React.useCallback((id) => {
+    if (!id) return null;
+    const c = coaches.find(x => x.id === id);
+    return c ? c.name : (COACH[id]?.name ?? id);
+  }, [coaches]);
+
+  const nowMin = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
+
+  const timeline = [...blocks]
+    .sort((a, b) => a.start - b.start)
+    .map(b => ({
+      t: fmtTime(b.start),
+      title: b.title || coachName(b.coach) || KIND[b.kind]?.label || 'Session',
+      weapon: b.weapon,
+      kind: b.kind,
+      live: b.live,
+      done: !b.live && b.start + b.dur < nowMin,
+    }));
+
+  // ── KPIs from real member data ──
+  const activeCount = members.length;
+  const trialCount = members.filter(m => (m.plan_name || '').toLowerCase() === 'trial').length;
+  const creditsTotal = members.reduce((s, m) => s + (m.credits || 0), 0);
+  const dueMembers = members.filter(m => m.pay_status === 'due' || m.pay_status === 'overdue');
+  const overdueCount = members.filter(m => m.pay_status === 'overdue').length;
+  const expiringMembers = members.filter(m => m.visa_status === 'expiring' || m.visa_status === 'expired');
+
+  // Main Room occupancy per 2h window (booked minutes / 120).
+  const windows = [[16 * 60, 18 * 60], [18 * 60, 20 * 60], [20 * 60, 22 * 60]];
+  const occupancy = windows.map(([ws, we]) => {
+    const booked = blocks.reduce((sum, b) => {
+      const bs = b.start, be = b.start + b.dur;
+      return sum + Math.max(0, Math.min(be, we) - Math.max(bs, ws));
+    }, 0);
+    return Math.round(Math.min(booked / (we - ws), 1) * 100);
+  });
+
+  const kpis = [
+    { label: 'Active members', value: String(activeCount), sub: `${activeCount - trialCount} active · ${trialCount} trial`, color: 'var(--ink)' },
+    { label: 'Credits balance', value: String(creditsTotal), sub: 'across all members', color: 'var(--ink)' },
+    { label: 'Payments due', value: String(dueMembers.length), sub: `${dueMembers.length - overdueCount} due · ${overdueCount} overdue`, color: dueMembers.length ? 'var(--danger)' : 'var(--ink)' },
+    { label: 'Visas expiring', value: String(expiringMembers.length), sub: 'expiring or expired', color: expiringMembers.length ? 'var(--warning)' : 'var(--ink)' },
+  ];
+
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
-        {[
-          { label: 'Active members', value: '7',    sub: '6 active · 1 trial', color: 'var(--ink)' },
-          { label: 'Credits balance', value: '21',   sub: 'across all members',  color: 'var(--ink)' },
-          { label: 'Payments due',   value: '€165', sub: '3 invoices · 1 overdue', color: 'var(--danger)' },
-          { label: 'Visas expiring', value: '2',    sub: 'within 14 days',        color: 'var(--warning)' },
-        ].map((k, i) => (
+        {kpis.map((k, i) => (
           <div key={i} style={{ background: 'var(--surface)', border: `1px solid ${i >= 2 ? (i===2?'color-mix(in oklab, var(--danger) 30%, var(--hairline))':'color-mix(in oklab, var(--warning) 30%, var(--hairline))') : 'var(--hairline)'}`, borderRadius: 'var(--r-card)', padding: '14px 16px', animation: `r-rise var(--d-base) var(--e-enter) ${i*40}ms both` }}>
             <div className="r-display r-tabular" style={{ fontSize: 30, color: k.color, lineHeight: 1 }}>{k.value}</div>
             <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 5 }}>{k.label}</div>
@@ -43,10 +85,13 @@ export function AdminDashboard({ onGotoCalendar, onGotoMembers }) {
             <button onClick={onGotoCalendar} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--brand)', fontSize: 12.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>Calendar <Icon name="chevR" size={13} color="var(--brand)" /></button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {timeline.length === 0 && (
+              <div style={{ padding: '24px 8px', fontSize: 13, color: 'var(--muted)' }}>No sessions scheduled today.</div>
+            )}
             {timeline.map((it, i) => (
               <div key={i} onMouseEnter={() => setHovRow(i)} onMouseLeave={() => setHovRow(null)} onClick={onGotoCalendar} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', margin: '0 -8px', borderRadius: 8, borderBottom: i < timeline.length - 1 ? '1px solid var(--hairline)' : 'none', opacity: it.done ? 0.45 : 1, cursor: 'pointer', background: hovRow === i ? 'var(--paper)' : 'transparent', transition: 'background var(--d-fast)', animation: `r-rise var(--d-base) var(--e-enter) ${i*40}ms both` }}>
                 <span className="r-tabular" style={{ fontSize: 13, color: 'var(--muted)', width: 42, flexShrink: 0 }}>{it.t}</span>
-                <span style={{ width: 3, alignSelf: 'stretch', borderRadius: 2, flexShrink: 0, background: KIND[it.kind].bar }} />
+                <span style={{ width: 3, alignSelf: 'stretch', borderRadius: 2, flexShrink: 0, background: KIND[it.kind]?.bar || 'var(--hairline)' }} />
                 <WeaponGlyph type={it.weapon} size={17} />
                 <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.title}</span>
                 {it.live && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--live)', flexShrink: 0 }}><span className="r-live-dot" /> LIVE</span>}
@@ -59,35 +104,41 @@ export function AdminDashboard({ onGotoCalendar, onGotoMembers }) {
           <StatCard>
             <CardLabel>Main Room · today</CardLabel>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[['16:00–18:00', 60, 'var(--steel)'], ['18:00–20:00', 100, 'var(--brand)'], ['20:00–22:00', 45, 'var(--steel)']].map(([label, pct, color]) => (
-                <div key={label}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span className="r-tabular" style={{ fontSize: 11.5, color: 'var(--muted)' }}>{label}</span>
-                    <span className="r-tabular" style={{ fontSize: 11.5, fontWeight: 600, color: pct === 100 ? 'var(--danger)' : 'var(--muted)' }}>{pct}%</span>
+              {windows.map(([ws, we], i) => {
+                const label = `${fmtTime(ws)}–${fmtTime(we)}`;
+                const pct = occupancy[i];
+                const color = pct >= 90 ? 'var(--brand)' : 'var(--steel)';
+                return (
+                  <div key={label}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span className="r-tabular" style={{ fontSize: 11.5, color: 'var(--muted)' }}>{label}</span>
+                      <span className="r-tabular" style={{ fontSize: 11.5, fontWeight: 600, color: pct === 100 ? 'var(--danger)' : 'var(--muted)' }}>{pct}%</span>
+                    </div>
+                    <div style={{ height: 6, background: 'var(--hairline)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: pct + '%', background: color, borderRadius: 3, transition: 'width var(--d-slow) var(--e-enter)' }} />
+                    </div>
                   </div>
-                  <div style={{ height: 6, background: 'var(--hairline)', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: pct + '%', background: color, borderRadius: 3, transition: 'width var(--d-slow) var(--e-enter)' }} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </StatCard>
-          <StatCard style={{ cursor: 'pointer' }}>
+          <StatCard onClick={onGotoMembers} style={{ cursor: 'pointer' }}>
             <CardLabel accent="var(--warning)">Payments due</CardLabel>
-            <div className="r-display r-tabular" style={{ fontSize: 26, color: 'var(--ink)' }}>€165</div>
+            <div className="r-display r-tabular" style={{ fontSize: 26, color: 'var(--ink)' }}>{dueMembers.length}</div>
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <span style={{ fontSize: 12, color: 'var(--warning)', background: 'var(--warning-tint)', padding: '2px 8px', borderRadius: 'var(--r-pill)', fontWeight: 600 }}>2 due</span>
-              <span style={{ fontSize: 12, color: 'var(--danger)', background: 'var(--danger-tint)', padding: '2px 8px', borderRadius: 'var(--r-pill)', fontWeight: 600 }}>1 overdue</span>
+              <span style={{ fontSize: 12, color: 'var(--warning)', background: 'var(--warning-tint)', padding: '2px 8px', borderRadius: 'var(--r-pill)', fontWeight: 600 }}>{dueMembers.length - overdueCount} due</span>
+              <span style={{ fontSize: 12, color: 'var(--danger)', background: 'var(--danger-tint)', padding: '2px 8px', borderRadius: 'var(--r-pill)', fontWeight: 600 }}>{overdueCount} overdue</span>
             </div>
           </StatCard>
           <StatCard style={{ cursor: 'pointer' }}>
             <CardLabel accent="var(--warning)">Visas expiring</CardLabel>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[['Maya Rocha', '9 days'], ['Noah Klein', '12 days']].map(([n, d]) => (
-                <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Avatar name={n} size={26} />
-                  <span style={{ fontSize: 13, color: 'var(--ink)', flex: 1 }}>{n}</span>
-                  <VisaBadge status="expiring" label={d} />
+              {expiringMembers.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>All up to date.</div>}
+              {expiringMembers.slice(0, 4).map((m) => (
+                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Avatar name={m.name} size={26} src={m.avatar_url} />
+                  <span style={{ fontSize: 13, color: 'var(--ink)', flex: 1 }}>{m.name}</span>
+                  <VisaBadge status={m.visa_status} />
                 </div>
               ))}
             </div>

@@ -11,6 +11,9 @@ import type {
   DocType,
   DocumentPatch,
   UploadInput,
+  Plan,
+  Settings,
+  Payment,
 } from './types';
 
 /**
@@ -188,6 +191,88 @@ export function createDb(supabase: SupabaseClient) {
     if (error) throw error;
   }
 
+  async function createCoach(coach: Partial<Coach>): Promise<Coach> {
+    const { data, error } = await supabase.from('coaches').insert(coach).select().single();
+    if (error) throw error;
+    return data as Coach;
+  }
+
+  // ── Plans ──────────────────────────────────────────────────
+  async function getPlans(): Promise<Plan[]> {
+    const { data, error } = await supabase.from('plans').select('*').order('sort');
+    if (error) throw error;
+    return (data ?? []) as Plan[];
+  }
+
+  async function createPlan(plan: Partial<Plan>): Promise<Plan> {
+    const { data, error } = await supabase.from('plans').insert(plan).select().single();
+    if (error) throw error;
+    return data as Plan;
+  }
+
+  async function updatePlan(id: string, patch: Partial<Plan>): Promise<void> {
+    const { error } = await supabase.from('plans').update(patch).eq('id', id);
+    if (error) throw error;
+  }
+
+  async function deletePlan(id: string): Promise<void> {
+    const { error } = await supabase.from('plans').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  // ── Club settings (single row, id = 1) ─────────────────────
+  async function getSettings(): Promise<Settings | null> {
+    const { data, error } = await supabase.from('settings').select('*').eq('id', 1).maybeSingle();
+    if (error) throw error;
+    return (data as Settings) ?? null;
+  }
+
+  async function updateSettings(patch: Partial<Settings>): Promise<Settings> {
+    const { data, error } = await supabase
+      .from('settings')
+      .upsert({ id: 1, ...patch, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Settings;
+  }
+
+  // ── Payments + credit top-ups ──────────────────────────────
+  async function getPaymentsForMember(memberId: string): Promise<Payment[]> {
+    const { data, error } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('member_id', memberId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as Payment[];
+  }
+
+  async function getPayments(): Promise<Payment[]> {
+    const { data, error } = await supabase
+      .from('payments')
+      .select('*, members(name)')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as Payment[];
+  }
+
+  /**
+   * Record a payment, top-up, or refund. A `credits_delta` also adjusts the
+   * member's credit balance in the same call so the two stay consistent.
+   */
+  async function recordPayment(payment: Partial<Payment>): Promise<Payment> {
+    const { data, error } = await supabase.from('payments').insert(payment).select().single();
+    if (error) throw error;
+    const row = data as Payment;
+    if (row.credits_delta && payment.member_id) {
+      const { data: member } = await supabase.from('members').select('credits').eq('id', payment.member_id).single();
+      const current = (member as { credits?: number } | null)?.credits ?? 0;
+      await supabase.from('members').update({ credits: current + row.credits_delta }).eq('id', payment.member_id);
+    }
+    return row;
+  }
+
   async function getBookingsForCoachOnDate(coachId: string, dateStr: string): Promise<Booking[]> {
     const { data, error } = await supabase
       .from('bookings')
@@ -343,7 +428,17 @@ export function createDb(supabase: SupabaseClient) {
     saveNote,
     getNotesForMember,
     getCoaches,
+    createCoach,
     updateCoachAvailability,
+    getPlans,
+    createPlan,
+    updatePlan,
+    deletePlan,
+    getSettings,
+    updateSettings,
+    getPaymentsForMember,
+    getPayments,
+    recordPayment,
     getBookingsForCoachOnDate,
     getCoachWeekStats,
     getAllBookingsLight,

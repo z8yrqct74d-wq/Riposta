@@ -1,16 +1,13 @@
 import React from 'react';
 import { Icon, Avatar, PaymentPill } from '../../components/Shared';
+import { getPlans, createPlan, updatePlan, deletePlan, getMembers, getPayments, getSettings, updateSettings } from '../../lib/db';
 
-const PLANS = [
-  { id: 'competitor', name: 'Competitor', sub: 'Monthly subscription', price: '€120/mo', credits: 6, desc: 'For active competitors. Includes 6 individual lesson credits per month, unlimited group sessions.' },
-  { id: 'monthly',    name: 'Monthly',    sub: 'Monthly subscription', price: '€80/mo',  credits: 3, desc: '3 lesson credits per month. Unlimited group sessions.' },
-  { id: 'pack10',     name: '10-credit pack', sub: 'Lesson pack', price: '€210',  credits: 10, desc: 'Buy 10 individual lesson credits. No expiry. 4.5% saving.' },
-  { id: 'pack5',      name: '5-credit pack',  sub: 'Lesson pack', price: '€115',  credits: 5,  desc: 'Buy 5 individual lesson credits. 4.2% saving.' },
-  { id: 'trial',      name: 'Trial',      sub: '4-week trial', price: '€35',   credits: 1,  desc: 'One individual lesson + 4 group sessions to try the club.' },
-  { id: 'dropin',     name: 'Drop-in',    sub: 'Pay per session', price: '€18/session', credits: 0, desc: 'Single group session, no commitment. Lesson credits available separately.' },
-];
+function slugify(name) {
+  return (name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `plan-${Date.now()}`;
+}
 
-function PlanCard({ plan }) {
+function PlanCard({ plan, onEdit }) {
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -20,47 +17,100 @@ function PlanCard({ plan }) {
         </div>
         <div className="r-display r-tabular" style={{ fontSize: 20, color: 'var(--brand)', textAlign: 'right' }}>{plan.price}</div>
       </div>
-      <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>{plan.desc}</p>
+      <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>{plan.description}</p>
       {plan.credits > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--steel)', background: 'var(--steel-tint)', padding: '2px 9px', borderRadius: 'var(--r-pill)' }}>{plan.credits} lesson credit{plan.credits>1?'s':''}</span>
         </div>
       )}
-      <button className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', marginTop: 4, padding: '7px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'transparent', color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>Edit plan</button>
+      <button onClick={() => onEdit(plan)} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', marginTop: 4, padding: '7px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'transparent', color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>Edit plan</button>
     </div>
   );
 }
 
-const SUBS = [
-  { name: 'Maya Rocha',    plan: 'Competitor', next: '1 Jul', pay: 'due' },
-  { name: 'Tomas Király',  plan: 'Monthly',    next: '1 Jul', pay: 'paid' },
-  { name: 'Hugo Almeida',  plan: 'Monthly',    next: '5 Jul', pay: 'paid' },
-  { name: 'Sofia Marin',   plan: 'Competitor', next: '1 Jul', pay: 'due' },
-  { name: 'Inès Morel',    plan: 'Competitor', next: '15 Jun', pay: 'overdue' },
-];
+function PlanEditor({ plan, onClose, onSave, onDelete }) {
+  const isNew = !plan?.id;
+  const [form, setForm] = React.useState({ name: '', sub: '', price: '', credits: 0, description: '', ...plan });
+  const [saving, setSaving] = React.useState(false);
+  const set = (patch) => setForm(f => ({ ...f, ...patch }));
+  const field = { width: '100%', padding: '9px 11px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'var(--paper)', font: 'inherit', fontSize: 13.5, color: 'var(--ink)', boxSizing: 'border-box' };
 
-const DUNNING = [
-  { name: 'Inès Morel',  inv: 'INV-0460', amount: '€120', due: '15 May', days: 21 },
-  { name: 'Sofia Marin', inv: 'INV-0461', amount: '€45',  due: '1 Jun',  days: 4 },
-];
+  const submit = async () => {
+    if (!form.name.trim()) return;
+    setSaving(true);
+    try {
+      if (isNew) await onSave({ id: slugify(form.name), name: form.name.trim(), sub: form.sub, price: form.price, credits: Number(form.credits) || 0, description: form.description }, true);
+      else await onSave({ name: form.name.trim(), sub: form.sub, price: form.price, credits: Number(form.credits) || 0, description: form.description }, false, plan.id);
+      onClose();
+    } catch { setSaving(false); }
+  };
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(23,21,15,0.18)', zIndex: 40 }} />
+      <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 340, background: 'var(--surface)', borderLeft: '1px solid var(--hairline)', zIndex: 50, boxShadow: 'var(--shadow-raise)', display: 'flex', flexDirection: 'column', animation: 'r-panel 240ms var(--e-enter)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid var(--hairline)' }}>
+          <h2 className="r-display" style={{ margin: 0, fontSize: 20, color: 'var(--ink)' }}>{isNew ? 'New plan' : 'Edit plan'}</h2>
+          <button onClick={onClose} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: 'none', background: 'transparent', display: 'flex' }}><Icon name="x" size={18} color="var(--muted)" /></button>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {[['Name', 'name', 'e.g. Competitor'], ['Subtitle', 'sub', 'e.g. Monthly subscription'], ['Price', 'price', 'e.g. €120/mo']].map(([label, key, ph]) => (
+            <div key={key}><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>{label}</div><input value={form[key] || ''} onChange={e => set({ [key]: e.target.value })} className="r-focusable" style={field} placeholder={ph} /></div>
+          ))}
+          <div><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Lesson credits</div><input type="number" value={form.credits} onChange={e => set({ credits: e.target.value })} className="r-focusable" style={field} /></div>
+          <div><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Description</div><textarea value={form.description || ''} onChange={e => set({ description: e.target.value })} className="r-focusable" style={{ ...field, minHeight: 72, resize: 'vertical' }} /></div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, padding: 20, borderTop: '1px solid var(--hairline)' }}>
+          {!isNew && <button onClick={() => onDelete(plan.id)} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', padding: '11px 14px', borderRadius: 'var(--r-btn)', border: '1px solid var(--danger)', background: 'transparent', color: 'var(--danger)', fontSize: 13.5, fontWeight: 600 }}>Delete</button>}
+          <button onClick={submit} disabled={saving} className="r-focusable" style={{ flex: 1, font: 'inherit', cursor: 'pointer', padding: 11, borderRadius: 'var(--r-btn)', border: 'none', background: 'var(--brand)', color: '#fff', fontSize: 13.5, fontWeight: 600, opacity: saving ? 0.6 : 1 }}>{isNew ? 'Create plan' : 'Save changes'}</button>
+        </div>
+      </div>
+      <style>{`@keyframes r-panel { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+    </>
+  );
+}
+
+const money = (n) => `€${Number(n || 0).toFixed(2)}`;
+const shortDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
 
 export function AdminPlans() {
   const [view, setView] = React.useState('catalogue');
+  const [plans, setPlans] = React.useState([]);
+  const [members, setMembers] = React.useState([]);
+  const [payments, setPayments] = React.useState([]);
+  const [editing, setEditing] = React.useState(null); // plan object or {} for new
+
+  const loadPlans = React.useCallback(() => { getPlans().then(setPlans).catch(() => {}); }, []);
+  React.useEffect(() => {
+    loadPlans();
+    getMembers().then(setMembers).catch(() => {});
+    getPayments().then(setPayments).catch(() => {});
+  }, [loadPlans]);
+
+  const savePlan = async (data, isNew, id) => {
+    if (isNew) await createPlan(data); else await updatePlan(id, data);
+    loadPlans();
+  };
+  const removePlan = async (id) => { await deletePlan(id); setEditing(null); loadPlans(); };
+
+  const subs = members.filter(m => m.plan_name);
+  const dunning = members.filter(m => m.pay_status === 'overdue');
   const tabs = [['catalogue','Plan catalogue'],['subscriptions','Subscriptions'],['dunning','Dunning queue'],['invoices','Invoices']];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       <div style={{ borderBottom: '1px solid var(--hairline)', background: 'var(--surface)', display: 'flex', padding: '0 24px' }}>
         {tabs.map(([id, label]) => (
           <button key={id} onClick={() => setView(id)} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: 'none', background: 'transparent', padding: '12px 16px', fontSize: 13.5, fontWeight: view===id ? 600 : 500, color: view===id ? 'var(--ink)' : 'var(--muted)', borderBottom: '2px solid ' + (view===id ? 'var(--brand)' : 'transparent'), transition: 'color var(--d-fast)', whiteSpace: 'nowrap' }}>
-            {label}{id==='dunning'&&DUNNING.length>0&&<span style={{ marginLeft: 7, background: 'var(--danger)', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 'var(--r-pill)', padding: '1px 6px' }}>{DUNNING.length}</span>}
+            {label}{id==='dunning'&&dunning.length>0&&<span style={{ marginLeft: 7, background: 'var(--danger)', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 'var(--r-pill)', padding: '1px 6px' }}>{dunning.length}</span>}
           </button>
         ))}
       </div>
       <div key={view} style={{ flex: 1, overflowY: 'auto', padding: 24, animation: 'r-fade 160ms var(--e-standard)' }}>
         {view === 'catalogue' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-            {PLANS.map(p => <PlanCard key={p.id} plan={p} />)}
-            <div style={{ background: 'transparent', border: '1px dashed var(--hairline)', borderRadius: 'var(--r-card)', padding: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', minHeight: 160 }}>
+            {plans.map(p => <PlanCard key={p.id} plan={p} onEdit={setEditing} />)}
+            <div onClick={() => setEditing({})} style={{ background: 'transparent', border: '1px dashed var(--hairline)', borderRadius: 'var(--r-card)', padding: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', minHeight: 160 }}>
               <div style={{ textAlign: 'center', color: 'var(--faint)' }}>
                 <Icon name="plus" size={22} color="var(--faint)" />
                 <div style={{ fontSize: 13, marginTop: 8 }}>New plan</div>
@@ -73,16 +123,17 @@ export function AdminPlans() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: 'var(--faint)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  {['Athlete','Plan','Next billing','Status'].map(h => <th key={h} style={{ padding: '11px 16px', fontWeight: 600, borderBottom: '1px solid var(--hairline)', background: 'var(--surface)' }}>{h}</th>)}
+                  {['Athlete','Plan','Credits','Status'].map(h => <th key={h} style={{ padding: '11px 16px', fontWeight: 600, borderBottom: '1px solid var(--hairline)', background: 'var(--surface)' }}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {SUBS.map((s, i) => (
-                  <tr key={i} style={{ borderBottom: i < SUBS.length-1 ? '1px solid var(--hairline)' : 'none', animation: `r-rise var(--d-base) var(--e-enter) ${i*30}ms both` }}>
-                    <td style={{ padding: '11px 16px' }}><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Avatar name={s.name} size={28} /><span style={{ fontWeight: 500, color: 'var(--ink)' }}>{s.name}</span></div></td>
-                    <td style={{ padding: '11px 16px', color: 'var(--muted)' }}>{s.plan}</td>
-                    <td className="r-tabular" style={{ padding: '11px 16px', color: 'var(--muted)' }}>{s.next}</td>
-                    <td style={{ padding: '11px 16px' }}><PaymentPill status={s.pay} size="sm" /></td>
+                {subs.length === 0 && <tr><td colSpan="4" style={{ padding: 32, textAlign: 'center', color: 'var(--muted)' }}>No subscriptions yet.</td></tr>}
+                {subs.map((s, i) => (
+                  <tr key={s.id} style={{ borderBottom: i < subs.length-1 ? '1px solid var(--hairline)' : 'none', animation: `r-rise var(--d-base) var(--e-enter) ${i*30}ms both` }}>
+                    <td style={{ padding: '11px 16px' }}><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Avatar name={s.name} size={28} src={s.avatar_url} /><span style={{ fontWeight: 500, color: 'var(--ink)' }}>{s.name}</span></div></td>
+                    <td style={{ padding: '11px 16px', color: 'var(--muted)' }}>{s.plan_name}</td>
+                    <td className="r-tabular" style={{ padding: '11px 16px', color: 'var(--muted)' }}>{s.credits}</td>
+                    <td style={{ padding: '11px 16px' }}><PaymentPill status={s.pay_status} size="sm" /></td>
                   </tr>
                 ))}
               </tbody>
@@ -91,54 +142,49 @@ export function AdminPlans() {
         )}
         {view === 'dunning' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ padding: '12px 14px', background: 'var(--danger-tint)', border: '1px solid var(--danger)', borderRadius: 'var(--r-card)', fontSize: 13, color: 'var(--danger)', fontWeight: 500 }}>
-              {DUNNING.length} outstanding invoices need follow-up. Payment links will be resent automatically after the dunning offset.
-            </div>
-            {DUNNING.map((d, i) => (
-              <div key={i} style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderLeft: '3px solid var(--danger)', borderRadius: 'var(--r-card)', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
-                <Avatar name={d.name} size={36} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{d.name}</div>
-                  <div className="r-mono" style={{ fontSize: 12, color: 'var(--faint)', marginTop: 2 }}>{d.inv} · Due {d.due}</div>
+            {dunning.length === 0 ? (
+              <div style={{ padding: '12px 14px', background: 'var(--success-tint)', border: '1px solid var(--success)', borderRadius: 'var(--r-card)', fontSize: 13, color: 'var(--success)', fontWeight: 500 }}>No overdue accounts. Everyone is up to date.</div>
+            ) : (
+              <>
+                <div style={{ padding: '12px 14px', background: 'var(--danger-tint)', border: '1px solid var(--danger)', borderRadius: 'var(--r-card)', fontSize: 13, color: 'var(--danger)', fontWeight: 500 }}>
+                  {dunning.length} overdue account{dunning.length>1?'s':''} need follow-up.
                 </div>
-                <div className="r-tabular" style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>{d.amount}</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--danger)', marginTop: 1 }}>{d.days} days overdue</div>
-                </div>
-                <button className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: 'none', background: 'var(--brand)', color: '#fff', borderRadius: 'var(--r-btn)', padding: '8px 14px', fontSize: 13, fontWeight: 600 }}>Resend link</button>
-              </div>
-            ))}
+                {dunning.map((d, i) => (
+                  <div key={d.id} style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderLeft: '3px solid var(--danger)', borderRadius: 'var(--r-card)', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <Avatar name={d.name} size={36} src={d.avatar_url} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{d.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--faint)', marginTop: 2 }}>{d.plan_name || '—'}</div>
+                    </div>
+                    <PaymentPill status="overdue" size="sm" />
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         )}
         {view === 'invoices' && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', overflow: 'hidden' }}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>All invoices</span>
-              <button className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--hairline)', background: 'transparent', borderRadius: 'var(--r-btn)', padding: '6px 12px', fontSize: 12.5, fontWeight: 600, color: 'var(--muted)' }}>
-                <Icon name="chart" size={14} color="var(--muted)" /> Export CSV
-              </button>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>All payments</span>
             </div>
-            {[
-              ['INV-0461','Maya Rocha','June squad fees','€45.00','5 Jun','due'],
-              ['INV-0460','Inès Morel','Monthly subscription','€120.00','15 May','overdue'],
-              ['INV-0459','Tomas Király','Monthly subscription','€80.00','1 Jun','paid'],
-              ['INV-0458','Hugo Almeida','Monthly subscription','€80.00','1 Jun','paid'],
-              ['INV-0457','Sofia Marin','Competitor monthly','€120.00','1 Jun','due'],
-            ].map((r, i, a) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: i < a.length-1 ? '1px solid var(--hairline)' : 'none' }}>
-                <div className="r-mono" style={{ fontSize: 11.5, color: 'var(--faint)', width: 72 }}>{r[0]}</div>
+            {payments.length === 0 && <div style={{ padding: 32, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No payments recorded yet.</div>}
+            {payments.map((r, i, a) => (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: i < a.length-1 ? '1px solid var(--hairline)' : 'none' }}>
+                <div className="r-mono" style={{ fontSize: 11.5, color: 'var(--faint)', width: 90, textTransform: 'capitalize' }}>{r.kind}</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--ink)' }}>{r[1]}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>{r[2]}</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--ink)' }}>{r.members?.name || 'Member'}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>{r.note || '—'}</div>
                 </div>
-                <span className="r-tabular" style={{ fontSize: 13, color: 'var(--muted)' }}>{r[3]}</span>
-                <span className="r-tabular" style={{ fontSize: 12, color: 'var(--faint)', width: 52, textAlign: 'right' }}>{r[4]}</span>
-                <PaymentPill status={r[5]} size="sm" />
+                <span className="r-tabular" style={{ fontSize: 13, color: 'var(--muted)' }}>{money(r.amount)}</span>
+                <span className="r-tabular" style={{ fontSize: 12, color: 'var(--faint)', width: 52, textAlign: 'right' }}>{shortDate(r.created_at)}</span>
+                <PaymentPill status={r.status} size="sm" />
               </div>
             ))}
           </div>
         )}
       </div>
+      {editing && <PlanEditor plan={editing} onClose={() => setEditing(null)} onSave={savePlan} onDelete={removePlan} />}
     </div>
   );
 }
@@ -152,58 +198,63 @@ function SettingsSection({ title, children }) {
   );
 }
 
-function SettingsRow({ label, sub, value, toggle, danger, last }) {
-  const [on, setOn] = React.useState(toggle !== undefined ? toggle : undefined);
+function ToggleRow({ label, sub, value, onChange, last }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 16px', borderBottom: last ? 'none' : '1px solid var(--hairline)' }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)' }}>{label}</div>
+        {sub && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{sub}</div>}
+      </div>
+      <button onClick={() => onChange(!value)} className="r-focusable" style={{ width: 44, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer', background: value ? 'var(--brand)' : 'var(--hairline)', position: 'relative', transition: 'background var(--d-base) var(--e-spring)', flexShrink: 0 }}>
+        <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: value ? 21 : 3, transition: 'left 220ms var(--e-spring)', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+      </button>
+    </div>
+  );
+}
+
+function ValueRow({ label, sub, value, danger, last }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 16px', borderBottom: last ? 'none' : '1px solid var(--hairline)' }}>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 14, fontWeight: 500, color: danger ? 'var(--danger)' : 'var(--ink)' }}>{label}</div>
         {sub && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{sub}</div>}
       </div>
-      {on !== undefined ? (
-        <button onClick={() => setOn(v => !v)} className="r-focusable" style={{ width: 44, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer', background: on ? 'var(--brand)' : 'var(--hairline)', position: 'relative', transition: 'background var(--d-base) var(--e-spring)', flexShrink: 0 }}>
-          <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: on ? 21 : 3, transition: 'left 220ms var(--e-spring)', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-        </button>
-      ) : value ? (
-        <span style={{ fontSize: 13.5, color: 'var(--muted)' }}>{value}</span>
-      ) : (
-        <Icon name="chevR" size={16} color="var(--faint)" />
-      )}
+      {value != null ? <span style={{ fontSize: 13.5, color: 'var(--muted)' }}>{value}</span> : <Icon name="chevR" size={16} color="var(--faint)" />}
     </div>
   );
 }
 
 export function AdminSettings() {
+  const [s, setS] = React.useState(null);
+
+  React.useEffect(() => { getSettings().then(setS).catch(() => {}); }, []);
+
+  const persist = (patch) => {
+    setS(prev => ({ ...prev, ...patch }));
+    updateSettings(patch).catch(() => {});
+  };
+
+  const v = s || {};
+
   return (
     <div style={{ maxWidth: 640, padding: '20px 24px', overflowY: 'auto', height: '100%' }}>
       <SettingsSection title="Club profile">
-        <SettingsRow label="Club name" value="Riposte Salle d'Armes" />
-        <SettingsRow label="City" value="Bucharest, Romania" />
-        <SettingsRow label="Contact email" value="admin@riposte.ro" last />
-      </SettingsSection>
-      <SettingsSection title="Pistes">
-        <SettingsRow label="Riposte Main Room" sub="Electric scoring · Active" toggle={true} last />
+        <ValueRow label="Club name" value={v.club_name ?? '—'} />
+        <ValueRow label="City" value={v.city ?? '—'} />
+        <ValueRow label="Contact email" value={v.contact_email ?? '—'} last />
       </SettingsSection>
       <SettingsSection title="Session rules">
-        <SettingsRow label="Cancellation window" sub="Free cancellation up to this many hours before" value="12 h" />
-        <SettingsRow label="Dunning offset" sub="Days after due before first reminder" value="3 days" last />
-      </SettingsSection>
-      <SettingsSection title="Integrations">
-        <SettingsRow label="xMoney" sub="Payment gateway · Connected" toggle={true} />
-        <SettingsRow label="Federation API" sub="Automatic licence check" toggle={false} last />
+        <ValueRow label="Cancellation window" sub="Free cancellation up to this many hours before" value={`${v.cancellation_window_hours ?? 12} h`} />
+        <ValueRow label="Dunning offset" sub="Days after due before first reminder" value={`${v.dunning_offset_days ?? 3} days`} last />
       </SettingsSection>
       <SettingsSection title="AI preferences">
-        <SettingsRow label="Daily digest" sub="Show AI digest strip on dashboard and calendar" toggle={true} />
-        <SettingsRow label="Lesson note tidying" sub="Auto-summarise coach notes into focus / improved / homework" toggle={true} />
-        <SettingsRow label="Digest tone" sub="How the digest phrases suggestions" value="Direct" last />
-      </SettingsSection>
-      <SettingsSection title="Roles & users">
-        <SettingsRow label="Admin users" value="1 active" />
-        <SettingsRow label="Coach accounts" value="2 active" last />
+        <ToggleRow label="Daily digest" sub="Show AI digest strip on dashboard and calendar" value={v.digest_enabled ?? true} onChange={val => persist({ digest_enabled: val })} />
+        <ToggleRow label="Lesson note tidying" sub="Auto-summarise coach notes into focus / improved / homework" value={v.note_tidying_enabled ?? true} onChange={val => persist({ note_tidying_enabled: val })} />
+        <ValueRow label="Digest tone" sub="How the digest phrases suggestions" value={v.digest_tone ?? 'Direct'} last />
       </SettingsSection>
       <SettingsSection title="Danger zone">
-        <SettingsRow label="Export all data" sub="Download a full JSON export of club data" danger />
-        <SettingsRow label="Delete club" sub="Permanently removes all data. Cannot be undone." danger last />
+        <ValueRow label="Export all data" sub="Download a full JSON export of club data" danger />
+        <ValueRow label="Delete club" sub="Permanently removes all data. Cannot be undone." danger last />
       </SettingsSection>
     </div>
   );

@@ -166,3 +166,40 @@ export interface DocumentPatch {
 export type UploadInput =
   | Blob
   | { uri: string; name?: string; type?: string };
+
+export interface Plan {
+  id: string;
+  name: string;
+  sub?: string | null;
+  price?: string | null;
+  credits: number;
+  description?: string | null;
+  sort?: number;
+  created_at?: string;
+}
+
+export interface Settings {
+  id: number;
+  club_name?: string | null;
+  city?: string | null;
+  contact_email?: string | null;
+  cancellation_window_hours?: number;
+  dunning_offset_days?: number;
+  digest_enabled?: boolean;
+  note_tidying_enabled?: boolean;
+  digest_tone?: string | null;
+  updated_at?: string;
+}
+
+export type PaymentKind = 'payment' | 'topup' | 'refund';
+
+export interface Payment {
+  id: string;
+  member_id: string;
+  amount: number;
+  kind: PaymentKind;
+  note?: string | null;
+  status: PayStatus;
+  credits_delta?: number;
+  created_at?: string;
+}

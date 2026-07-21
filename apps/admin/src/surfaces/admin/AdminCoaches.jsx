@@ -1,18 +1,15 @@
 import React from 'react';
 import { Icon, Avatar, WeaponChip } from '../../components/Shared';
-
-const COACHES_DATA = [
-  { id: 'sandu', name: 'Constantin Sandu', weapons: ['sabre'], maitre: false, load: 8, max: 12, bio: 'Senior coach. Sabre specialist with 14 years of competitive experience.' },
-  { id: 'dina',  name: 'Lucian Dina',      weapons: ['sabre'], maitre: false, load: 5, max: 10, bio: 'Footwork and tactics coach. Focuses on U14–U17 development.' },
-];
+import { getCoaches, getCoachWeekStats, updateCoachAvailability, createCoach } from '../../lib/db';
 
 const AVAIL_DAYS  = ['Mon','Tue','Wed','Thu','Fri','Sat'];
 const AVAIL_SLOTS = ['16:00','17:00','18:00','19:00','20:00','21:00'];
+const WEAPONS = ['foil','epee','sabre'];
 
-const INIT_AVAIL = {
-  sandu: { Mon:['17:00','18:00','19:00'], Tue:['17:00','18:00','19:00'], Wed:[], Thu:['17:00','18:00','19:00','20:00'], Fri:['17:00','18:00'], Sat:[] },
-  dina:  { Mon:['18:00','19:00'], Tue:['18:00','19:00'], Wed:['18:00'], Thu:['18:00','19:00'], Fri:['17:00','18:00','19:00'], Sat:[] },
-};
+function slugify(name) {
+  return (name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `coach-${Date.now()}`;
+}
 
 function LoadMeter({ load, max }) {
   const pct = Math.min(load / max, 1);
@@ -52,25 +49,40 @@ function CoachRosterCard({ coach, selected, onSelect }) {
           </div>
         </div>
       </div>
-      <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>{coach.bio}</p>
+      {coach.bio && <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>{coach.bio}</p>}
       <LoadMeter load={coach.load} max={coach.max} />
     </div>
   );
 }
 
-function AvailGrid({ coachId }) {
-  const initSlots = INIT_AVAIL[coachId] || {};
-  const [grid, setGrid] = React.useState(() => {
-    const g = {};
-    AVAIL_DAYS.forEach(d => AVAIL_SLOTS.forEach(s => { g[d + '|' + s] = (initSlots[d] || []).includes(s); }));
-    return g;
-  });
-  const [blackout, setBlackout] = React.useState({ Wed: coachId === 'sandu' });
+// Availability persists as { slots: { "Mon|17:00": true, … }, blackout: { Wed: true } }
+// — the same shape the coach mobile app reads/writes.
+function AvailGrid({ coach, onSave }) {
+  const [grid, setGrid] = React.useState({});
+  const [blackout, setBlackout] = React.useState({});
+  const ready = React.useRef(false);
+
+  React.useEffect(() => {
+    ready.current = false;
+    const av = coach.availability_json || {};
+    setGrid(av.slots && typeof av.slots === 'object' ? av.slots : {});
+    setBlackout(av.blackout && typeof av.blackout === 'object' ? av.blackout : {});
+    // allow one tick before the save effect arms, so loading doesn't re-save
+    const t = setTimeout(() => { ready.current = true; }, 0);
+    return () => clearTimeout(t);
+  }, [coach.id]);
+
+  // Debounced persistence
+  React.useEffect(() => {
+    if (!ready.current) return;
+    const t = setTimeout(() => { onSave(coach.id, { slots: grid, blackout }); }, 500);
+    return () => clearTimeout(t);
+  }, [grid, blackout, coach.id, onSave]);
 
   return (
     <div>
       <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.5 }}>
-        Tap a slot to toggle availability. This is the weekly recurring template.
+        Tap a slot to toggle availability. This is the weekly recurring template — changes save automatically.
       </div>
       <div style={{ overflowX: 'auto' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '52px repeat(6, 1fr)', gap: 4, minWidth: 380 }}>
@@ -82,9 +94,10 @@ function AvailGrid({ coachId }) {
             <React.Fragment key={s}>
               <div className="r-tabular" style={{ fontSize: 11, color: 'var(--faint)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 6 }}>{s}</div>
               {AVAIL_DAYS.map(d => {
-                const on = grid[d + '|' + s] && !blackout[d];
+                const key = d + '|' + s;
+                const on = grid[key] && !blackout[d];
                 return (
-                  <button key={d+s} disabled={blackout[d]} onClick={() => setGrid(g => ({ ...g, [d+'|'+s]: !g[d+'|'+s] }))} className="r-focusable" style={{
+                  <button key={key} disabled={blackout[d]} onClick={() => setGrid(g => ({ ...g, [key]: !g[key] }))} className="r-focusable" style={{
                     aspectRatio: '1', borderRadius: 6, font: 'inherit',
                     cursor: blackout[d] ? 'default' : 'pointer',
                     border: '1px solid ' + (on ? 'var(--brand)' : 'var(--hairline)'),
@@ -105,41 +118,144 @@ function AvailGrid({ coachId }) {
           <button key={d} onClick={() => setBlackout(b => ({ ...b, [d]: !b[d] }))} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, padding: '5px 12px', borderRadius: 'var(--r-pill)', border: '1px solid ' + (blackout[d] ? 'var(--danger)' : 'var(--hairline)'), background: blackout[d] ? 'var(--danger-tint)' : 'var(--surface)', color: blackout[d] ? 'var(--danger)' : 'var(--muted)' }}>{d}</button>
         ))}
       </div>
-      <div style={{ marginTop: 20, padding: '13px 14px', background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Icon name="calendar" size={16} color="var(--steel)" />
-        <div style={{ flex: 1, fontSize: 13.5, color: 'var(--ink)', fontWeight: 500 }}>Away Fri 13 Jun — regional competition</div>
-        <Icon name="x" size={16} color="var(--faint)" style={{ cursor: 'pointer' }} />
-      </div>
-      <button className="r-focusable" style={{ marginTop: 10, font: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7, border: '1px solid var(--hairline)', background: 'transparent', borderRadius: 'var(--r-btn)', padding: '8px 14px', fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>
-        <Icon name="plus" size={15} color="var(--muted)" /> Add one-off exception
-      </button>
     </div>
   );
 }
 
-export function AdminCoaches() {
-  const [selected, setSelected] = React.useState('sandu');
-  const coach = COACHES_DATA.find(c => c.id === selected);
+function AddCoachPanel({ onClose, onCreate }) {
+  const [name, setName] = React.useState('');
+  const [email, setEmail] = React.useState('');
+  const [weapon, setWeapon] = React.useState('sabre');
+  const [maitre, setMaitre] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+
+  const field = { width: '100%', padding: '9px 11px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'var(--paper)', font: 'inherit', fontSize: 13.5, color: 'var(--ink)', boxSizing: 'border-box' };
+
+  const submit = async () => {
+    if (!name.trim()) { setErr('Name is required.'); return; }
+    if (!email.trim()) { setErr('Email is required — it enables the coach to log in.'); return; }
+    setSaving(true); setErr(null);
+    try {
+      await onCreate({ name: name.trim(), email: email.trim().toLowerCase(), weapon, maitre });
+      onClose();
+    } catch (e) {
+      setErr(e?.message || 'Could not create coach.');
+      setSaving(false);
+    }
+  };
+
   return (
-    <div style={{ display: 'flex', height: '100%' }}>
+    <>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(23,21,15,0.18)', zIndex: 40 }} />
+      <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 340, background: 'var(--surface)', borderLeft: '1px solid var(--hairline)', zIndex: 50, boxShadow: 'var(--shadow-raise)', display: 'flex', flexDirection: 'column', animation: 'r-panel 240ms var(--e-enter)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid var(--hairline)' }}>
+          <h2 className="r-display" style={{ margin: 0, fontSize: 20, color: 'var(--ink)' }}>Add coach</h2>
+          <button onClick={onClose} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: 'none', background: 'transparent', display: 'flex' }}><Icon name="x" size={18} color="var(--muted)" /></button>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Name</div><input value={name} onChange={e => setName(e.target.value)} className="r-focusable" style={field} placeholder="e.g. Constantin Sandu" /></div>
+          <div><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Login email</div><input value={email} onChange={e => setEmail(e.target.value)} className="r-focusable" style={field} placeholder="coach@club.ro" /><div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 5 }}>The coach signs in with this Google account.</div></div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Weapon</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {WEAPONS.map(w => (
+                <button key={w} onClick={() => setWeapon(w)} className="r-focusable" style={{ flex: 1, font: 'inherit', cursor: 'pointer', borderRadius: 'var(--r-btn)', padding: '8px', textTransform: 'capitalize', fontSize: 13, fontWeight: 600, border: '1px solid ' + (weapon===w?'var(--brand)':'var(--hairline)'), background: weapon===w?'var(--brand-tint)':'transparent', color: weapon===w?'var(--brand)':'var(--muted)' }}>{w}</button>
+              ))}
+            </div>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={maitre} onChange={e => setMaitre(e.target.checked)} />
+            <span style={{ fontSize: 13.5, color: 'var(--ink)' }}>Maître d'armes</span>
+          </label>
+          {err && <div style={{ fontSize: 12.5, color: 'var(--danger)' }}>{err}</div>}
+        </div>
+        <div style={{ padding: 20, borderTop: '1px solid var(--hairline)' }}>
+          <button onClick={submit} disabled={saving} className="r-focusable" style={{ width: '100%', font: 'inherit', cursor: saving ? 'default' : 'pointer', padding: 12, borderRadius: 'var(--r-btn)', border: 'none', background: 'var(--brand)', color: '#fff', fontSize: 14, fontWeight: 600, opacity: saving ? 0.6 : 1 }}>{saving ? 'Creating…' : 'Create coach'}</button>
+        </div>
+      </div>
+      <style>{`@keyframes r-panel { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+    </>
+  );
+}
+
+export function AdminCoaches() {
+  const [coaches, setCoaches] = React.useState([]);
+  const [selected, setSelected] = React.useState(null);
+  const [adding, setAdding] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const rows = await getCoaches();
+      const stats = await Promise.all(rows.map(c => getCoachWeekStats(c.id).catch(() => ({ lessons: 0 }))));
+      const mapped = rows.map((c, i) => ({
+        id: c.id,
+        name: c.name,
+        weapons: c.weapon ? [c.weapon] : [],
+        maitre: !!c.maitre,
+        load: stats[i]?.lessons ?? 0,
+        max: c.max_load || 12,
+        bio: c.blurb,
+        email: c.email,
+        availability_json: c.availability_json,
+      }));
+      setCoaches(mapped);
+      setSelected(sel => sel && mapped.some(m => m.id === sel) ? sel : (mapped[0]?.id ?? null));
+    } catch {
+      /* leave empty on failure */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const saveAvail = React.useCallback((coachId, json) => {
+    setCoaches(cs => cs.map(c => c.id === coachId ? { ...c, availability_json: json } : c));
+    updateCoachAvailability(coachId, json).catch(() => {});
+  }, []);
+
+  const createNew = React.useCallback(async ({ name, email, weapon, maitre }) => {
+    const id = slugify(name);
+    await createCoach({ id, name, email, weapon, maitre, max_load: 12, availability_json: { slots: {}, blackout: {} } });
+    await load();
+    setSelected(id);
+  }, [load]);
+
+  const coach = coaches.find(c => c.id === selected);
+
+  return (
+    <div style={{ display: 'flex', height: '100%', position: 'relative' }}>
       <div style={{ width: 320, flexShrink: 0, borderRight: '1px solid var(--hairline)', padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {COACHES_DATA.map(c => (
+        {loading && coaches.length === 0 && (
+          <>{[0,1].map(i => <div key={i} className="r-skeleton" style={{ height: 150, borderRadius: 'var(--r-card)' }} />)}</>
+        )}
+        {coaches.map(c => (
           <CoachRosterCard key={c.id} coach={c} selected={selected===c.id} onSelect={() => setSelected(c.id)} />
         ))}
-        <button className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, border: '1px dashed var(--hairline)', background: 'transparent', borderRadius: 'var(--r-card)', padding: 14, fontSize: 13.5, fontWeight: 600, color: 'var(--muted)' }}>
+        <button onClick={() => setAdding(true)} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, border: '1px dashed var(--hairline)', background: 'transparent', borderRadius: 'var(--r-card)', padding: 14, fontSize: 13.5, fontWeight: 600, color: 'var(--muted)' }}>
           <Icon name="plus" size={16} color="var(--muted)" /> Add coach
         </button>
       </div>
       <div key={selected} style={{ flex: 1, overflowY: 'auto', padding: 24, animation: 'r-fade var(--d-base) var(--e-standard)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <Avatar name={coach.name} size={40} />
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', fontFamily: 'var(--font-display)' }}>{coach.name}</div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>Weekly availability template</div>
-          </div>
-        </div>
-        <AvailGrid coachId={selected} />
+        {coach ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+              <Avatar name={coach.name} size={40} />
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', fontFamily: 'var(--font-display)' }}>{coach.name}</div>
+                <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{coach.email || 'Weekly availability template'}</div>
+              </div>
+            </div>
+            <AvailGrid coach={coach} onSave={saveAvail} />
+          </>
+        ) : !loading && (
+          <div style={{ padding: 40, color: 'var(--muted)', fontSize: 14 }}>No coaches yet. Add one to get started.</div>
+        )}
       </div>
+      {adding && <AddCoachPanel onClose={() => setAdding(false)} onCreate={createNew} />}
     </div>
   );
 }
