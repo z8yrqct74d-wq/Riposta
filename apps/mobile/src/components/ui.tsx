@@ -133,6 +133,18 @@ export function Screen({ children, scroll = false, padded = true, style }: Scree
   );
 }
 
+// ── ColorBarRow ──────────────────────────────────────────────
+// Surface card with a colored accent bar down the left edge.
+export function ColorBarRow({ bar, children, style }: { bar: string; children: React.ReactNode; style?: ViewStyle }) {
+  const t = useTheme();
+  return (
+    <View style={[{ flexDirection: 'row', backgroundColor: t.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.colors.hairline, borderRadius: t.radius.card, overflow: 'hidden' }, style]}>
+      <View style={{ width: 3, backgroundColor: bar }} />
+      <View style={{ flex: 1, padding: t.space.s4 }}>{children}</View>
+    </View>
+  );
+}
+
 // ── Sheet ────────────────────────────────────────────────────
 // Basic bottom sheet primitive. Phase 3 upgrades the athlete flows to
 // @gorhom/bottom-sheet; this covers simple confirm/option sheets meanwhile.
