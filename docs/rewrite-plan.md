@@ -173,4 +173,4 @@ riposte/
 - [x] **Phase 4** — port coach surface (MyDay, roster, availability, session attendance, lesson) — typechecks
 - [x] **Phase 5** — security hardening: RLS migration + auth linkage written (⚠ apply + test in Supabase with scoped tokens before relying on it)
 - [ ] **Phase 6** — remaining backend gaps (core tables done in 1b)
-- [ ] **Phase 7** — build + ship (Vercel / EAS / retire Capacitor)
+- [x] **Phase 7** — build + ship config (Vercel monorepo build, eas.json, expo-notifications scaffold, Capacitor retired, docs/SHIP.md); actual deploys need your Vercel/EAS/Apple accounts
