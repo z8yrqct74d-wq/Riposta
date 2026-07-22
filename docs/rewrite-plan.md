@@ -182,5 +182,5 @@ riposte/
 - [x] **Phase 3** — port athlete surface (onboarding, home, booking, schedule, payments, progress, check-in, profile) — typechecks
 - [x] **Phase 4** — port coach surface (MyDay, roster, availability, session attendance, lesson) — typechecks
 - [x] **Phase 5** — security hardening: RLS migration + auth linkage written (⚠ apply + test in Supabase with scoped tokens before relying on it)
-- [ ] **Phase 6** — remaining backend gaps (core tables done in 1b)
+- [x] **Phase 6** — backend gaps for wired admin: `plans`/`settings`/`payments` tables + core functions, done as part of Phase 1b (`6f0062e`)
 - [x] **Phase 7** — build + ship config: Vercel monorepo build for a private/unlisted admin domain, Xcode Cloud repo-side setup (`apps/mobile/ios/` + `ci_scripts/`) for TestFlight on every push to `main`, `docs/SHIP.md` runbook; actual account-side setup (Apple Developer/App Store Connect, Vercel domain + DNS) is on you — see `docs/SHIP.md`
