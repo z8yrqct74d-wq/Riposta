@@ -135,10 +135,20 @@ riposte/
 
 ## Phase 7 — Build + ship
 
-- `apps/admin`: Vercel deploy, env `VITE_SUPABASE_*`.
-- `apps/mobile`: EAS Build → iOS → TestFlight. `scheme: 'riposte'`, bundle id
-  `ro.sportriposta.riposte`. `expo-notifications` scaffolded for later.
-- Retire Capacitor entirely.
+- `apps/admin`: Vercel deploy on a private, unlisted custom domain (e.g.
+  `admin.sportriposta.ro`) — `noindex`/`robots.txt` + the existing
+  Google-OAuth `AdminGate` as the real access control. Env `VITE_SUPABASE_*`.
+- `apps/mobile`: Xcode Cloud → iOS → TestFlight, auto-build + auto-distribute
+  to Internal Testing on every push to `main`. `scheme: 'riposte'`, bundle id
+  `ro.sportriposta.riposte`. Requires a committed native project
+  (`apps/mobile/ios/`, via `expo prebuild`) + `ios/ci_scripts/` — see
+  `docs/SHIP.md` for the full runbook. `eas.json`/EAS Build kept only for
+  optional ad hoc dev-client builds, not the shipping path.
+  `expo-notifications` scaffolded for later (already added the
+  `aps-environment` entitlement — the App ID's Push Notifications capability
+  must be enabled before the first Xcode Cloud build).
+- Retire Capacitor entirely (done — `ios/` that exists now is Expo-generated
+  for Xcode Cloud, not a Capacitor leftover).
 
 ## Verification
 
@@ -148,7 +158,7 @@ riposte/
   mark attendance persists → avatar upload → QR check-in → Progress chart.
 - Security: with a member's JWT, confirm reading another member's row /
   another coach's bookings is denied; admin routes blocked for non-admin.
-- TestFlight: `eas build -p ios --profile preview` → real device.
+- TestFlight: Xcode Cloud build on a push to `main` → Internal Testing → real device.
 
 ## Risks / calls made
 
@@ -173,4 +183,4 @@ riposte/
 - [x] **Phase 4** — port coach surface (MyDay, roster, availability, session attendance, lesson) — typechecks
 - [x] **Phase 5** — security hardening: RLS migration + auth linkage written (⚠ apply + test in Supabase with scoped tokens before relying on it)
 - [ ] **Phase 6** — remaining backend gaps (core tables done in 1b)
-- [x] **Phase 7** — build + ship config (Vercel monorepo build, eas.json, expo-notifications scaffold, Capacitor retired, docs/SHIP.md); actual deploys need your Vercel/EAS/Apple accounts
+- [x] **Phase 7** — build + ship config: Vercel monorepo build for a private/unlisted admin domain, Xcode Cloud repo-side setup (`apps/mobile/ios/` + `ci_scripts/`) for TestFlight on every push to `main`, `docs/SHIP.md` runbook; actual account-side setup (Apple Developer/App Store Connect, Vercel domain + DNS) is on you — see `docs/SHIP.md`

@@ -4,5 +4,6 @@ dist/
 *.local
 .env
 
-# Capacitor — commit ios/ so Xcode signing/settings persist across machines.
+# apps/mobile/ios is intentionally committed (Xcode Cloud needs the project
+# in the repo). apps/mobile/android is not — no Android CI target yet.
 android/
