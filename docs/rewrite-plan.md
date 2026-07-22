@@ -169,7 +169,7 @@ riposte/
 - [x] **Phase 1a** — admin split into `apps/admin` + `AdminGate` (`2706b8f`)
 - [x] **Phase 1b** — admin screens wired + Phase 6 backend tables (`6f0062e`)
 - [x] **Phase 2** — Expo mobile scaffold (theme, nav, auth, icons) — typechecks
-- [ ] **Phase 3** — port athlete surface
+- [x] **Phase 3** — port athlete surface (onboarding, home, booking, schedule, payments, progress, check-in, profile) — typechecks
 - [ ] **Phase 4** — port coach surface
 - [ ] **Phase 5** — security hardening (RLS + auth linkage)
 - [ ] **Phase 6** — remaining backend gaps (core tables done in 1b)
