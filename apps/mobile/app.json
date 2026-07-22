@@ -4,6 +4,7 @@
     "slug": "riposte",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "scheme": "riposte",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -13,14 +14,27 @@
     },
     "android": {
       "package": "ro.sportriposta.riposte",
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F1E38"
+      }
     },
     "web": {
       "bundler": "metro"
     },
     "plugins": [
       "expo-router",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#0F1E38"
+        }
+      ]
     ]
   }
 }

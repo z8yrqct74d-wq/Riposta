@@ -3,6 +3,7 @@ dist/
 .DS_Store
 *.local
 .env
+.expo/
 
 # apps/mobile/ios is intentionally committed (Xcode Cloud needs the project
 # in the repo). apps/mobile/android is not — no Android CI target yet.
