@@ -16,6 +16,7 @@ export type AttendanceStatus = 'pending' | 'present' | 'late' | 'absent';
 
 export interface Member {
   id: string;
+  user_id?: string | null;
   name: string;
   email: string | null;
   category?: string | null;
@@ -44,6 +45,7 @@ export interface CoachAvailability {
 
 export interface Coach {
   id: string;
+  user_id?: string | null;
   name: string;
   weapon?: Weapon | null;
   maitre?: boolean;
@@ -141,6 +143,7 @@ export interface SessionAttendanceRecord {
  * signature, so `User` is directly assignable).
  */
 export interface AuthUserLike {
+  id?: string;
   email?: string | null;
   user_metadata?: { full_name?: string } | null;
 }

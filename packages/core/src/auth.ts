@@ -29,14 +29,27 @@ export function createAuth(supabase: SupabaseClient) {
     return (data as Admin) ?? null;
   }
 
+  /**
+   * Link a table row to the signed-in auth user the first time we see them,
+   * so the Phase 5 RLS policies (`user_id = auth.uid()`) resolve. No-op once
+   * linked or when the auth uid is unavailable.
+   */
+  async function linkUserId(table: 'members' | 'coaches' | 'admins', id: string, existingUserId: string | null | undefined, authId?: string): Promise<void> {
+    if (!authId || existingUserId) return;
+    await supabase.from(table).update({ user_id: authId }).eq('id', id);
+  }
+
   async function upsertMemberFromAuth(user: AuthUserLike): Promise<Member> {
     const email = user.email ?? '';
     const existing = await getMemberByEmail(email);
-    if (existing) return existing;
+    if (existing) {
+      await linkUserId('members', existing.id, existing.user_id, user.id).catch(() => {});
+      return existing;
+    }
     const name = user.user_metadata?.full_name || email.split('@')[0];
     const { data, error } = await supabase
       .from('members')
-      .insert({ name, email: email.toLowerCase(), credits: 0, pay_status: 'paid', visa_status: 'valid' })
+      .insert({ name, email: email.toLowerCase(), credits: 0, pay_status: 'paid', visa_status: 'valid', user_id: user.id ?? null })
       .select()
       .single();
     if (error) throw error;
@@ -44,13 +57,20 @@ export function createAuth(supabase: SupabaseClient) {
   }
 
   // Single source of truth for role. Admin access = the admins table;
-  // coach access = the coaches table; everyone else is an athlete.
+  // coach access = the coaches table; everyone else is an athlete. On first
+  // login we link the row's user_id so RLS can scope by auth.uid().
   async function resolveUserRole(user: AuthUserLike | null | undefined): Promise<RoleResolution> {
     if (!user?.email) return { role: 'athlete', member: null, coach: null, admin: null };
     const admin = await getAdminByEmail(user.email).catch(() => null);
-    if (admin) return { role: 'admin', admin, coach: null, member: null };
+    if (admin) {
+      await linkUserId('admins', admin.id, admin.user_id, user.id).catch(() => {});
+      return { role: 'admin', admin, coach: null, member: null };
+    }
     const coach = await getCoachByEmail(user.email).catch(() => null);
-    if (coach) return { role: 'coach', coach, member: null, admin: null };
+    if (coach) {
+      await linkUserId('coaches', coach.id, coach.user_id, user.id).catch(() => {});
+      return { role: 'coach', coach, member: null, admin: null };
+    }
     const member = await upsertMemberFromAuth(user).catch(() => null);
     return { role: 'athlete', member, coach: null, admin: null };
   }

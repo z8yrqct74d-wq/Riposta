@@ -171,6 +171,6 @@ riposte/
 - [x] **Phase 2** — Expo mobile scaffold (theme, nav, auth, icons) — typechecks
 - [x] **Phase 3** — port athlete surface (onboarding, home, booking, schedule, payments, progress, check-in, profile) — typechecks
 - [x] **Phase 4** — port coach surface (MyDay, roster, availability, session attendance, lesson) — typechecks
-- [ ] **Phase 5** — security hardening (RLS + auth linkage)
+- [x] **Phase 5** — security hardening: RLS migration + auth linkage written (⚠ apply + test in Supabase with scoped tokens before relying on it)
 - [ ] **Phase 6** — remaining backend gaps (core tables done in 1b)
 - [ ] **Phase 7** — build + ship (Vercel / EAS / retire Capacitor)
