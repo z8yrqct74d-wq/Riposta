@@ -170,7 +170,7 @@ riposte/
 - [x] **Phase 1b** — admin screens wired + Phase 6 backend tables (`6f0062e`)
 - [x] **Phase 2** — Expo mobile scaffold (theme, nav, auth, icons) — typechecks
 - [x] **Phase 3** — port athlete surface (onboarding, home, booking, schedule, payments, progress, check-in, profile) — typechecks
-- [ ] **Phase 4** — port coach surface
+- [x] **Phase 4** — port coach surface (MyDay, roster, availability, session attendance, lesson) — typechecks
 - [ ] **Phase 5** — security hardening (RLS + auth linkage)
 - [ ] **Phase 6** — remaining backend gaps (core tables done in 1b)
 - [ ] **Phase 7** — build + ship (Vercel / EAS / retire Capacitor)
