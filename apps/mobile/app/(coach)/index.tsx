@@ -13,9 +13,8 @@ import { isoDate } from '@riposte/core';
 import type { CalendarBlock, Booking, Weapon } from '@riposte/core';
 
 type CView = 'Day' | 'Week' | 'Month';
-const DAY = 24 * 60;
 const minToTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-const todayDow = () => (new Date().getDay() + 6) % 7;
+const todayDow = () => (new Date().getDay() + 6) % 7; // 0 = Monday .. 6 = Sunday
 const nowMin = () => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); };
 function slotStatus(startMin: number, durMin: number) {
   const nm = nowMin();
@@ -23,15 +22,19 @@ function slotStatus(startMin: number, durMin: number) {
   if (nm >= startMin) return 'live';
   return 'future';
 }
+function addDays(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return isoDate(new Date(y, m - 1, d + days));
+}
+function scopedToCoach(b: CalendarBlock, coachId: string | null) {
+  return b.coach === coachId || b.coach === null;
+}
 
-function buildDayItems(blocks: CalendarBlock[], bookings: Booking[]): CoachItem[] {
-  const dow = todayDow();
-  const dayStart = dow * DAY;
-  const blockItems: CoachItem[] = blocks.filter((b) => Math.floor(b.start / DAY) === dow).map((b) => {
-    const timeMin = b.start - dayStart;
-    return { id: b.id, blockId: b.id, t: minToTime(timeMin), startMin: timeMin, durMin: b.dur, type: b.kind || 'group', title: b.title, who: b.piste || 'Main Room', weapon: b.weapon, piste: b.piste };
-  });
-  const lessonItems: CoachItem[] = (bookings || []).map((bk) => {
+function buildDayItems(blocks: CalendarBlock[], bookings: Booking[], todayStr: string, coachId: string | null): CoachItem[] {
+  const blockItems: CoachItem[] = blocks.filter((b) => b.date === todayStr && scopedToCoach(b, coachId)).map((b) => (
+    { id: b.id, blockId: b.id, t: minToTime(b.start), startMin: b.start, durMin: b.dur, type: b.kind || 'group', title: b.title, who: b.piste || 'Main Room', weapon: b.weapon, piste: b.piste }
+  ));
+  const lessonItems: CoachItem[] = (bookings || []).filter((bk) => bk.slot_date === todayStr).map((bk) => {
     const [h, m] = (bk.slot_time || '0:0').split(':').map(Number);
     const startMin = h * 60 + m;
     const mb = bk.members;
@@ -54,32 +57,33 @@ function buildDayItems(blocks: CalendarBlock[], bookings: Booking[]): CoachItem[
 }
 
 interface WeekDay { dow: string; dom: number; today: boolean; items: { id: string; type: 'lesson' | 'group' | 'open'; title: string | null; t: string; weapon?: Weapon | null; status: string | null }[]; }
-function buildWeekGrid(blocks: CalendarBlock[]): WeekDay[] {
+function buildWeekGrid(blocks: CalendarBlock[], bookings: Booking[], weekStart: string, todayStr: string, coachId: string | null): WeekDay[] {
   const LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const today = new Date();
-  const td = todayDow();
-  const mon = new Date(today); mon.setDate(today.getDate() - td);
   return LABELS.map((dow, di) => {
-    const date = new Date(mon); date.setDate(mon.getDate() + di);
-    const isToday = di === td;
-    const items = blocks.filter((b) => Math.floor(b.start / DAY) === di).map((b) => {
-      const timeMin = b.start - di * DAY;
-      return { id: b.id, type: b.kind || 'group', title: b.title, t: minToTime(timeMin), weapon: b.weapon, status: isToday ? slotStatus(timeMin, b.dur) : null };
-    }).sort((a, b) => a.t.localeCompare(b.t));
-    return { dow, dom: date.getDate(), items, today: isToday };
+    const dateStr = addDays(weekStart, di);
+    const isToday = dateStr === todayStr;
+    const blockItems = blocks.filter((b) => b.date === dateStr && scopedToCoach(b, coachId)).map((b) => (
+      { id: b.id, type: b.kind || 'group', title: b.title, t: minToTime(b.start), weapon: b.weapon, status: isToday ? slotStatus(b.start, b.dur) : null }
+    ));
+    const lessonItems = bookings.filter((bk) => bk.slot_date === dateStr).map((bk) => {
+      const [h, m] = (bk.slot_time || '0:0').split(':').map(Number);
+      return { id: bk.id, type: 'lesson' as const, title: bk.members?.name || 'Athlete', t: (bk.slot_time || '').slice(0, 5), weapon: (bk.members?.weapon as Weapon) || null, status: isToday ? slotStatus(h * 60 + m, 45) : null };
+    });
+    const items = [...blockItems, ...lessonItems].sort((a, b) => a.t.localeCompare(b.t));
+    return { dow, dom: Number(dateStr.split('-')[2]), items, today: isToday };
   });
 }
 
-function buildMonthGrid(blocks: CalendarBlock[]): Record<number, { type: 'lesson' | 'group' | 'open'; title: string | null }[]> {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+function buildMonthGrid(blocks: CalendarBlock[], bookings: Booking[], monthStart: string, monthEnd: string, coachId: string | null): Record<number, { type: 'lesson' | 'group' | 'open'; title: string | null }[]> {
+  const [y, m] = monthStart.split('-').map(Number);
+  const daysInMonth = Number(monthEnd.split('-')[2]);
   const result: Record<number, { type: 'lesson' | 'group' | 'open'; title: string | null }[]> = {};
   for (let d = 1; d <= daysInMonth; d++) {
-    const dow = (new Date(year, month, d).getDay() + 6) % 7;
-    const sessions = blocks.filter((b) => Math.floor(b.start / DAY) === dow);
-    if (sessions.length) result[d] = sessions.map((b) => ({ type: b.kind || 'group', title: b.title }));
+    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const blockSessions = blocks.filter((b) => b.date === dateStr && scopedToCoach(b, coachId)).map((b) => ({ type: b.kind || 'group', title: b.title }));
+    const lessonSessions = bookings.filter((bk) => bk.slot_date === dateStr).map((bk) => ({ type: 'lesson' as const, title: bk.members?.name || 'Athlete' }));
+    const sessions = [...blockSessions, ...lessonSessions];
+    if (sessions.length) result[d] = sessions;
   }
   return result;
 }
@@ -122,13 +126,25 @@ export default function MyDay() {
   const todayStr = isoDate(today);
   const todayLabel = today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
+  const weekStart = addDays(todayStr, -todayDow());
+  const weekEnd = addDays(weekStart, 6);
+  const monthStart = isoDate(new Date(today.getFullYear(), today.getMonth(), 1));
+  const monthEnd = isoDate(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+  const rangeFrom = weekStart < monthStart ? weekStart : monthStart;
+  const rangeTo = weekEnd > monthEnd ? weekEnd : monthEnd;
+  const coachId = coach?.id ?? null;
+
   const CKIND: Record<string, string> = { lesson: t.colors.brand, group: t.colors.steel, open: t.colors.hairline };
 
   useEffect(() => {
-    Promise.all([db.getCalendarBlocks(), coach?.id ? db.getBookingsForCoachOnDate(coach.id, todayStr) : Promise.resolve([])])
-      .then(([blocks, bookings]) => { setDayItems(buildDayItems(blocks, bookings)); setWeekData(buildWeekGrid(blocks)); setMonthData(buildMonthGrid(blocks)); })
+    Promise.all([db.getCalendarBlocks(rangeFrom, rangeTo), coachId ? db.getBookingsForCoachInRange(coachId, rangeFrom, rangeTo) : Promise.resolve([])])
+      .then(([blocks, bookings]) => {
+        setDayItems(buildDayItems(blocks, bookings, todayStr, coachId));
+        setWeekData(buildWeekGrid(blocks, bookings, weekStart, todayStr, coachId));
+        setMonthData(buildMonthGrid(blocks, bookings, monthStart, monthEnd, coachId));
+      })
       .catch(() => {});
-  }, [coach?.id, todayStr]);
+  }, [coachId, rangeFrom, rangeTo]);
 
   const open = (it: CoachItem) => { setSelected(it); router.push(it.type === 'lesson' ? '/lesson' : '/session'); };
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { isoDate } from '@riposte/core';
 import { WeaponGlyph, WEAPON_LABEL, Icon, Avatar, PaymentPill, VisaBadge, WeaponChip } from '../../components/Shared';
 import { KIND, COACH, fmtTime } from '../../data/adminData';
 import { getMembers, getCalendarBlocks, getCoaches } from '../../lib/db';
@@ -19,7 +20,7 @@ export function AdminDashboard({ onGotoCalendar, onGotoMembers }) {
 
   React.useEffect(() => {
     getMembers().then(setMembers).catch(() => {});
-    getCalendarBlocks().then(setBlocks).catch(() => {});
+    getCalendarBlocks(isoDate()).then(setBlocks).catch(() => {});
     getCoaches().then(setCoaches).catch(() => {});
   }, []);
 

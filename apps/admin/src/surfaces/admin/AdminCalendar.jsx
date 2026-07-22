@@ -1,6 +1,6 @@
 import React from 'react';
 import { WeaponGlyph } from '../../components/Shared';
-import { PISTES, CAL_START, CAL_END, PX_MIN, SNAP, fmtTime, KIND, COACH } from '../../data/adminData';
+import { PISTES, CAL_START, CAL_END, PX_MIN, SNAP, fmtTime, KIND } from '../../data/adminData';
 
 export const snap = (v) => Math.round(v / SNAP) * SNAP;
 const overlap = (aS, aD, bS, bD) => aS < bS + bD && bS < aS + aD;
@@ -16,7 +16,7 @@ export function findConflicts(cand, blocks) {
   return { pisteClash, coachClash, any: pisteClash || coachClash };
 }
 
-function CalBlock({ block, laneWidth, dragState, onPointerDownMove, onPointerDownResize, onClick, shaking, conflictLive }) {
+function CalBlock({ block, laneWidth, dragState, onPointerDownMove, onPointerDownResize, onClick, shaking, conflictLive, coachMap }) {
   const k = KIND[block.kind];
   const isDragging = dragState && dragState.id === block.id;
   const top = (block.start - CAL_START) * PX_MIN;
@@ -45,7 +45,7 @@ function CalBlock({ block, laneWidth, dragState, onPointerDownMove, onPointerDow
       </div>
       {height > 34 && (
         <div className="r-tabular" style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 2 }}>
-          {fmtTime(block.start)}–{fmtTime(block.start + block.dur)}{block.coach ? ` · ${COACH[block.coach].name}` : ''}
+          {fmtTime(block.start)}–{fmtTime(block.start + block.dur)}{block.coach ? ` · ${coachMap[block.coach]?.name ?? 'Coach'}` : ''}
         </div>
       )}
       <div onPointerDown={(e) => { e.stopPropagation(); onPointerDownResize(e, block); }}
@@ -56,7 +56,7 @@ function CalBlock({ block, laneWidth, dragState, onPointerDownMove, onPointerDow
   );
 }
 
-export function ResourceCalendar({ blocks, setBlocks, onSelect, onCreate, toast }) {
+export function ResourceCalendar({ blocks, setBlocks, onSelect, onCreate, toast, coachMap }) {
   const gridRef = React.useRef(null);
   const [drag, setDrag] = React.useState(null);
   const [shakeId, setShakeId] = React.useState(null);
@@ -105,7 +105,7 @@ export function ResourceCalendar({ blocks, setBlocks, onSelect, onCreate, toast 
       if (c.any) {
         setShakeId(d.id);
         setTimeout(() => setShakeId(null), 340);
-        toast(c.pisteClash ? 'Piste already booked at that time' : `${COACH[cand.coach].name} is double-booked`, 'danger');
+        toast(c.pisteClash ? 'Piste already booked at that time' : `${coachMap[cand.coach]?.name ?? 'Coach'} is double-booked`, 'danger');
       } else {
         setBlocks(bs => bs.map(b => b.id === d.id ? { ...b, start: d.curStart, dur: d.curDur, piste: d.curPiste } : b));
       }
@@ -158,7 +158,7 @@ export function ResourceCalendar({ blocks, setBlocks, onSelect, onCreate, toast 
             <div key={p.id} onClick={(e) => onLaneClick(e, p.id)} style={{ flex: 1, position: 'relative', borderRight: i < laneCount - 1 ? '1px solid var(--hairline)' : 'none', cursor: 'copy' }}>
               {renderBlocks.filter(b => b.piste === p.id).map(b => (
                 <CalBlock key={b.id} block={b} dragState={drag} shaking={shakeId === b.id}
-                  conflictLive={liveConflict}
+                  conflictLive={liveConflict} coachMap={coachMap}
                   onPointerDownMove={beginMove} onPointerDownResize={beginResize} onClick={onSelect} />
               ))}
             </div>

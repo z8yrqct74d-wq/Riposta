@@ -72,12 +72,24 @@ export function createDb(supabase: SupabaseClient) {
   }
 
   // ── Calendar blocks ────────────────────────────────────────
-  async function getCalendarBlocks(): Promise<CalendarBlock[]> {
-    const { data, error } = await supabase.from('calendar_blocks').select('*').order('start_min');
+  /**
+   * Blocks for a date or inclusive date range. `to` defaults to `from` (a
+   * single day) — e.g. `getCalendarBlocks('2026-07-22')` for one day,
+   * `getCalendarBlocks(monday, sunday)` for a week.
+   */
+  async function getCalendarBlocks(from: string, to?: string): Promise<CalendarBlock[]> {
+    const { data, error } = await supabase
+      .from('calendar_blocks')
+      .select('*')
+      .gte('date', from)
+      .lte('date', to ?? from)
+      .order('date')
+      .order('start_min');
     if (error) throw error;
     // normalise to match the shape the calendar component expects
     return (data ?? []).map((b) => ({
       id: b.id,
+      date: b.date,
       piste: b.piste,
       kind: b.kind,
       title: b.title,
@@ -94,6 +106,7 @@ export function createDb(supabase: SupabaseClient) {
       .from('calendar_blocks')
       .insert({
         id: block.id,
+        date: block.date,
         piste: block.piste,
         kind: block.kind,
         title: block.title,
@@ -111,6 +124,7 @@ export function createDb(supabase: SupabaseClient) {
 
   async function updateCalendarBlock(id: string, changes: Partial<CalendarBlock>): Promise<void> {
     const patch: Record<string, unknown> = {};
+    if (changes.date !== undefined) patch.date = changes.date;
     if (changes.start !== undefined) patch.start_min = changes.start;
     if (changes.title !== undefined) patch.title = changes.title;
     if (changes.coach !== undefined) patch.coach = changes.coach;
@@ -306,6 +320,21 @@ export function createDb(supabase: SupabaseClient) {
     return (data ?? []) as Booking[];
   }
 
+  /** Like {@link getBookingsForCoachOnDate} but across an inclusive date range. */
+  async function getBookingsForCoachInRange(coachId: string, from: string, to: string): Promise<Booking[]> {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*, members(name, weapon, category, credits, avatar_url)')
+      .eq('coach_id', coachId)
+      .gte('slot_date', from)
+      .lte('slot_date', to)
+      .eq('status', 'booked')
+      .order('slot_date')
+      .order('slot_time');
+    if (error) throw error;
+    return (data ?? []) as Booking[];
+  }
+
   async function getCoachWeekStats(coachId: string): Promise<{ lessons: number; att: number }> {
     const today = new Date();
     const dow = (today.getDay() + 6) % 7;
@@ -461,6 +490,7 @@ export function createDb(supabase: SupabaseClient) {
     getPayments,
     recordPayment,
     getBookingsForCoachOnDate,
+    getBookingsForCoachInRange,
     getCoachWeekStats,
     getAllBookingsLight,
     getSessionAttendance,

@@ -1,13 +1,27 @@
 import React from 'react';
+import { isoDate } from '@riposte/core';
 import { Icon, Avatar, WeaponGlyph } from '../../components/Shared';
 import { ChromeWindow } from '../../components/BrowserWindow';
-import { PISTES, CAL_START, CAL_END, INITIAL_BLOCKS, KIND, COACH } from '../../data/adminData';
+import { PISTES, CAL_START, CAL_END, INITIAL_BLOCKS, KIND } from '../../data/adminData';
 import { ResourceCalendar, findConflicts } from './AdminCalendar';
 import { AdminDashboard, AdminMembers } from './AdminViews';
 import { MemberDetail } from './AdminMemberDetail';
 import { AdminCoaches } from './AdminCoaches';
 import { AdminPlans, AdminSettings } from './AdminPlansSettings';
-import { getCalendarBlocks, createCalendarBlock, updateCalendarBlock, deleteCalendarBlock } from '../../lib/db';
+import { getCalendarBlocks, createCalendarBlock, updateCalendarBlock, deleteCalendarBlock, getCoaches } from '../../lib/db';
+
+const DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MON = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function fmtLongDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return `${DOW[dt.getDay()]}, ${d} ${MON[m - 1]} ${y}`;
+}
+function shiftDate(iso, days) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d + days);
+  return isoDate(dt);
+}
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid' },
@@ -96,7 +110,7 @@ const NAV_CTA = {
   plans:    { label: 'New plan',   icon: 'plus' },
 };
 
-function TopBar({ title, sub, view, onView, onNew, nav }) {
+function TopBar({ title, sub, view, onView, onNew, nav, onPrevDay, onNextDay, onToday }) {
   const cta = NAV_CTA[nav];
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 14px', flexShrink: 0 }}>
@@ -105,6 +119,13 @@ function TopBar({ title, sub, view, onView, onNew, nav }) {
         {sub && <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2, whiteSpace: 'nowrap' }}>{sub}</div>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {nav === 'calendar' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <button onClick={onPrevDay} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: '1px solid var(--hairline)', background: 'var(--surface)', borderRadius: 'var(--r-btn)', padding: '7px 9px', display: 'flex' }}><Icon name="chevL" size={15} color="var(--muted)" /></button>
+            <button onClick={onToday} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: '1px solid var(--hairline)', background: 'var(--surface)', borderRadius: 'var(--r-btn)', padding: '7px 12px', fontSize: 12.5, fontWeight: 600, color: 'var(--muted)' }}>Today</button>
+            <button onClick={onNextDay} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: '1px solid var(--hairline)', background: 'var(--surface)', borderRadius: 'var(--r-btn)', padding: '7px 9px', display: 'flex' }}><Icon name="chevR" size={15} color="var(--muted)" /></button>
+          </div>
+        )}
         {nav === 'calendar' && (
           <div style={{ display: 'flex', background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-btn)', padding: 2 }}>
             {['Day','Week','Month'].map(v => (
@@ -128,7 +149,7 @@ function Field({ label, children }) {
 
 const selStyle = () => ({ width: '100%', padding: '9px 11px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'var(--paper)', font: 'inherit', fontSize: 13.5, color: 'var(--ink)', boxSizing: 'border-box' });
 
-function SidePanel({ draft, onChange, onSave, onDelete, onClose, conflict }) {
+function SidePanel({ draft, onChange, onSave, onDelete, onClose, conflict, coaches }) {
   if (!draft) return null;
   const times = []; for (let t = CAL_START; t <= CAL_END - 15; t += 15) times.push(t);
   const durs = [30,45,60,75,90,105,120];
@@ -151,6 +172,7 @@ function SidePanel({ draft, onChange, onSave, onDelete, onClose, conflict }) {
             </div>
           </Field>
           <Field label="Title"><input value={draft.title} onChange={e => onChange({ title: e.target.value })} className="r-focusable" style={selStyle()} placeholder="e.g. Maya Rocha" /></Field>
+          <Field label="Date"><input type="date" value={draft.date} onChange={e => onChange({ date: e.target.value })} className="r-focusable" style={selStyle()} /></Field>
           <Field label="Piste">
             <select value={draft.piste} onChange={e => onChange({ piste: e.target.value })} className="r-focusable" style={selStyle()}>
               {PISTES.map(p => <option key={p.id} value={p.id}>{p.label}{p.electric ? ' · electric' : ''}</option>)}
@@ -165,7 +187,7 @@ function SidePanel({ draft, onChange, onSave, onDelete, onClose, conflict }) {
               <Field label="Coach">
                 <select value={draft.coach || ''} onChange={e => onChange({ coach: e.target.value || null })} className="r-focusable" style={selStyle()}>
                   <option value="">— none —</option>
-                  {Object.entries(COACH).map(([id, c]) => <option key={id} value={id}>{c.name}{c.maitre ? ' (Maître)' : ''}</option>)}
+                  {coaches.map(c => <option key={c.id} value={c.id}>{c.name}{c.maitre ? ' (Maître)' : ''}</option>)}
                 </select>
               </Field>
               <Field label="Weapon">
@@ -213,38 +235,52 @@ function Toast({ toast }) {
 function AdminApp() {
   const [nav, setNav] = React.useState('calendar');
   const [view, setView] = React.useState('Day');
-  const [blocks, setBlocks] = React.useState(INITIAL_BLOCKS);
+  const [selectedDate, setSelectedDate] = React.useState(() => isoDate());
+  const [blocks, setBlocks] = React.useState(() => INITIAL_BLOCKS.map(b => ({ ...b, date: isoDate() })));
+  const [coaches, setCoaches] = React.useState([]);
   const [draft, setDraft] = React.useState(null);
   const [panelConflict, setPanelConflict] = React.useState(null);
   const [toast, setToast] = React.useState(null);
   const [digest, setDigest] = React.useState(true);
   const [selMember, setSelMember] = React.useState(null);
 
-  // Load blocks from Supabase on mount
+  const coachMap = React.useMemo(() => Object.fromEntries(coaches.map(c => [c.id, c])), [coaches]);
+
   React.useEffect(() => {
-    getCalendarBlocks()
-      .then(data => { if (data.length) setBlocks(data); })
-      .catch(() => {}); // silently fall back to INITIAL_BLOCKS
+    getCoaches().then(setCoaches).catch(() => {});
   }, []);
+
+  // Load the selected day's blocks from Supabase whenever the date changes.
+  React.useEffect(() => {
+    let cancelled = false;
+    const demoFallback = () => selectedDate === isoDate() ? INITIAL_BLOCKS.map(b => ({ ...b, date: selectedDate })) : [];
+    getCalendarBlocks(selectedDate)
+      .then(data => { if (!cancelled) setBlocks(data.length ? data : demoFallback()); })
+      .catch(() => { if (!cancelled) setBlocks(demoFallback()); });
+    return () => { cancelled = true; };
+  }, [selectedDate]);
 
   const fireToast = (msg, tone) => { setToast({ msg, tone }); setTimeout(() => setToast(null), 2600); };
 
-  const openCreate = (partial) => { setPanelConflict(null); setDraft({ kind: 'lesson', title: '', piste: 'p1', start: 18*60, dur: 45, coach: 'sandu', weapon: 'sabre', ...partial }); };
+  const openCreate = (partial) => { setPanelConflict(null); setDraft({ kind: 'lesson', title: '', piste: 'p1', date: selectedDate, start: 18*60, dur: 45, coach: coaches[0]?.id ?? null, weapon: 'sabre', ...partial }); };
   const openEdit = (b) => { setPanelConflict(null); setDraft({ ...b }); };
   const changeDraft = (patch) => setDraft(d => ({ ...d, ...patch }));
 
   const saveDraft = async () => {
     const cand = { id: draft.id || 'new', piste: draft.piste, start: draft.start, dur: draft.dur, coach: draft.kind === 'open' ? null : draft.coach };
-    const c = findConflicts(cand, blocks);
-    if (c.any) { setPanelConflict(c.pisteClash ? 'That piste is already booked for this time.' : 'That coach is already booked for this time.'); return; }
+    const sameDay = draft.date === selectedDate;
+    if (sameDay) {
+      const c = findConflicts(cand, blocks);
+      if (c.any) { setPanelConflict(c.pisteClash ? 'That piste is already booked for this time.' : 'That coach is already booked for this time.'); return; }
+    }
     const cleaned = { ...draft, coach: draft.kind === 'open' ? null : draft.coach };
     if (draft.id) {
-      setBlocks(bs => bs.map(b => b.id === draft.id ? cleaned : b));
+      setBlocks(bs => sameDay ? bs.map(b => b.id === draft.id ? cleaned : b) : bs.filter(b => b.id !== draft.id));
       updateCalendarBlock(draft.id, cleaned).catch(() => {});
       fireToast('Block updated', 'success');
     } else {
       const newBlock = { ...cleaned, id: 'b' + Date.now() };
-      setBlocks(bs => [...bs, newBlock]);
+      if (sameDay) setBlocks(bs => [...bs, newBlock]);
       createCalendarBlock(newBlock).catch(() => {});
       fireToast('Block created', 'success');
     }
@@ -258,10 +294,10 @@ function AdminApp() {
   };
 
   const titles = {
-    dashboard: ['Dashboard', 'Friday, 6 June 2026'],
+    dashboard: ['Dashboard', fmtLongDate(isoDate())],
     members:   ['Members', '7 athletes'],
-    calendar:  ['Resource calendar', 'Friday, 6 June 2026 · Riposte Main Room'],
-    coaches:   ['Coaches', '2 active'],
+    calendar:  ['Resource calendar', `${fmtLongDate(selectedDate)} · Riposte Main Room`],
+    coaches:   ['Coaches', `${coaches.length} active`],
     plans:     ['Plans & billing', ''],
     settings:  ['Settings', ''],
   };
@@ -278,7 +314,10 @@ function AdminApp() {
           </div>
         ) : (
           <>
-            <TopBar title={titles[nav][0]} sub={titles[nav][1]} view={view} onView={setView} nav={nav} onNew={() => openCreate({})} />
+            <TopBar title={titles[nav][0]} sub={titles[nav][1]} view={view} onView={setView} nav={nav} onNew={() => openCreate({})}
+              onPrevDay={() => setSelectedDate(d => shiftDate(d, -1))}
+              onNextDay={() => setSelectedDate(d => shiftDate(d, 1))}
+              onToday={() => setSelectedDate(isoDate())} />
             {showDigest && (
               <AIDigest onDismiss={() => setDigest(false)} items={[
                 { text: '3 lessons unfilled tomorrow at 18:00', tone: 'warning' },
@@ -291,7 +330,7 @@ function AdminApp() {
               {nav === 'members'   && <AdminMembers onSelectMember={setSelMember} />}
               {nav === 'calendar'  && (
                 <div style={{ padding: 24 }}>
-                  <ResourceCalendar blocks={blocks} setBlocks={setBlocks} onSelect={openEdit} onCreate={openCreate} toast={fireToast} />
+                  <ResourceCalendar blocks={blocks} setBlocks={setBlocks} onSelect={openEdit} onCreate={openCreate} toast={fireToast} coachMap={coachMap} />
                   <div style={{ display: 'flex', gap: 18, marginTop: 14, fontSize: 12, color: 'var(--muted)', alignItems: 'center' }}>
                     {Object.entries(KIND).map(([k, v]) => (
                       <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: v.bg, border: '1px solid '+v.fg, borderLeft: '3px solid '+v.bar }} /> {v.label}</span>
@@ -304,7 +343,7 @@ function AdminApp() {
               {nav === 'plans'    && <AdminPlans />}
               {nav === 'settings' && <AdminSettings />}
             </div>
-            {nav === 'calendar' && <SidePanel draft={draft} onChange={changeDraft} onSave={saveDraft} onDelete={deleteDraft} onClose={() => setDraft(null)} conflict={panelConflict} />}
+            {nav === 'calendar' && <SidePanel draft={draft} onChange={changeDraft} onSave={saveDraft} onDelete={deleteDraft} onClose={() => setDraft(null)} conflict={panelConflict} coaches={coaches} />}
           </>
         )}
         <Toast toast={toast} />

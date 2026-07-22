@@ -65,6 +65,7 @@ export interface Admin {
 /** Row shape as stored in `calendar_blocks`. */
 export interface CalendarBlockRow {
   id: string;
+  date: string; // YYYY-MM-DD — the specific day this block occurs on
   piste: string;
   kind: BlockKind;
   title: string | null;
@@ -79,6 +80,7 @@ export interface CalendarBlockRow {
 /** Normalised shape the calendar UI consumes (start + duration). */
 export interface CalendarBlock {
   id: string;
+  date: string; // YYYY-MM-DD
   piste: string;
   kind: BlockKind;
   title: string | null;
