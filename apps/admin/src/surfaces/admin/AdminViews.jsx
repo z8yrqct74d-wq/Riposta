@@ -1,7 +1,7 @@
 import React from 'react';
 import { isoDate } from '@riposte/core';
 import { WeaponGlyph, WEAPON_LABEL, Icon, Avatar, PaymentPill, VisaBadge, WeaponChip } from '../../components/Shared';
-import { KIND, COACH, fmtTime } from '../../data/adminData';
+import { KIND, fmtTime } from '../../data/adminData';
 import { getMembers, getCalendarBlocks, getCoaches } from '../../lib/db';
 
 export function StatCard({ children, style }) {
@@ -26,8 +26,7 @@ export function AdminDashboard({ onGotoCalendar, onGotoMembers }) {
 
   const coachName = React.useCallback((id) => {
     if (!id) return null;
-    const c = coaches.find(x => x.id === id);
-    return c ? c.name : (COACH[id]?.name ?? id);
+    return coaches.find(x => x.id === id)?.name ?? null;
   }, [coaches]);
 
   const nowMin = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
@@ -150,41 +149,34 @@ export function AdminDashboard({ onGotoCalendar, onGotoMembers }) {
   );
 }
 
-export const MEMBERS = [
-  { name: 'Maya Rocha',   cat: 'U17', weapon: 'foil',  plan: 'Competitor', credits: 5, pay: 'due',     visa: 'expiring', last: 'Today' },
-  { name: 'Tomas Király', cat: 'Senior', weapon: 'epee', plan: 'Monthly',  credits: 2, pay: 'paid',    visa: 'valid',    last: 'Yesterday' },
-  { name: 'Léa Bernard',  cat: 'U14', weapon: 'sabre', plan: 'Lesson pack', credits: 8, pay: 'paid',   visa: 'valid',    last: '2 Jun' },
-  { name: 'Inès Morel',   cat: 'U17', weapon: 'epee',  plan: 'Competitor', credits: 0, pay: 'overdue', visa: 'expired',  last: '28 May' },
-  { name: 'Hugo Almeida', cat: 'Senior', weapon: 'foil', plan: 'Drop-in',  credits: 1, pay: 'paid',    visa: 'valid',    last: '3 Jun' },
-  { name: 'Sofia Marin',  cat: 'U14', weapon: 'sabre', plan: 'Monthly',    credits: 4, pay: 'due',     visa: 'valid',    last: '1 Jun' },
-  { name: 'Noah Klein',   cat: 'U11', weapon: 'foil',  plan: 'Trial',      credits: 1, pay: 'paid',    visa: 'expiring', last: '4 Jun' },
-];
-
 export const PAY_BAR = { paid: 'var(--success)', due: 'var(--warning)', overdue: 'var(--danger)', refunded: 'var(--hairline)' };
 
 export function AdminMembers({ onSelectMember }) {
   const [q, setQ] = React.useState('');
   const [wf, setWf] = React.useState(null);
-  const [allMembers, setAllMembers] = React.useState(MEMBERS);
+  const [allMembers, setAllMembers] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
+    let cancelled = false;
     getMembers()
       .then(data => {
-        if (data?.length) {
-          setAllMembers(data.map(m => ({
-            id: m.id,
-            name: m.name,
-            cat: m.category,
-            weapon: m.weapon,
-            plan: m.plan_name,
-            credits: m.credits,
-            pay: m.pay_status,
-            visa: m.visa_status,
-            last: m.last_seen,
-          })));
-        }
+        if (cancelled) return;
+        setAllMembers((data || []).map(m => ({
+          id: m.id,
+          name: m.name,
+          cat: m.category,
+          weapon: m.weapon,
+          plan: m.plan_name,
+          credits: m.credits,
+          pay: m.pay_status,
+          visa: m.visa_status,
+          last: m.last_seen,
+        })));
       })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setAllMembers([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   const rows = allMembers.filter(m => (!wf || m.weapon === wf) && m.name.toLowerCase().includes(q.toLowerCase()));
@@ -216,8 +208,11 @@ export function AdminMembers({ onSelectMember }) {
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && (
-              <tr><td colSpan="7"><div style={{padding:40,textAlign:'center'}}><div className="r-display" style={{fontSize:22,color:'var(--ink)',marginBottom:6}}>No results.</div><div style={{fontSize:13,color:'var(--muted)'}}>Try adjusting your search or filters.</div></div></td></tr>
+            {loading && (
+              <tr><td colSpan="7"><div style={{padding:40,textAlign:'center'}}><div style={{fontSize:13,color:'var(--muted)'}}>Loading members…</div></div></td></tr>
+            )}
+            {!loading && rows.length === 0 && (
+              <tr><td colSpan="7"><div style={{padding:40,textAlign:'center'}}><div className="r-display" style={{fontSize:22,color:'var(--ink)',marginBottom:6}}>{allMembers.length === 0 ? 'No members yet.' : 'No results.'}</div><div style={{fontSize:13,color:'var(--muted)'}}>{allMembers.length === 0 ? 'Members will appear here once added.' : 'Try adjusting your search or filters.'}</div></div></td></tr>
             )}
             {rows.map((m, i) => (
               <tr key={i} onClick={() => onSelectMember && onSelectMember(m)}

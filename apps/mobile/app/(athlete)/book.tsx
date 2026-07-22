@@ -12,29 +12,15 @@ import { Icon } from '../../src/components/Icon';
 import { WeaponGlyph } from '../../src/components/WeaponGlyph';
 import { db } from '../../src/lib/supabase';
 import { useAthlete } from '../../src/athlete/AthleteData';
-import { isoDate } from '@riposte/core';
-import type { Coach, Weapon } from '@riposte/core';
+import { AVAIL_DAYS, AVAIL_SLOTS, isoDate } from '@riposte/core';
+import type { Coach, Weapon, Booking } from '@riposte/core';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-// Weekly availability by day-of-week (1=Mon … 6=Sat).
-const COACH_SCHEDULE: Record<string, Record<number, { t: string; piste: string }[]>> = {
-  sandu: {
-    1: [{ t: '18:00', piste: 'Riposte Main Room' }, { t: '18:45', piste: 'Riposte Main Room' }],
-    4: [{ t: '18:00', piste: 'Riposte Main Room' }, { t: '18:45', piste: 'Riposte Main Room' }],
-    5: [{ t: '17:00', piste: 'Riposte Main Room' }, { t: '17:45', piste: 'Riposte Main Room' }],
-    6: [{ t: '10:00', piste: 'Riposte Main Room' }, { t: '10:45', piste: 'Riposte Main Room' }],
-  },
-  dina: {
-    2: [{ t: '18:30', piste: 'Riposte Main Room' }],
-    4: [{ t: '19:30', piste: 'Riposte Main Room' }],
-    5: [{ t: '17:00', piste: 'Riposte Main Room' }, { t: '17:45', piste: 'Riposte Main Room' }],
-    6: [{ t: '11:30', piste: 'Riposte Main Room' }, { t: '12:15', piste: 'Riposte Main Room' }],
-  },
-};
+const PISTE_NAME = 'Riposte Main Room';
 
-interface Day { id: string; dow: string; dom: string; label?: string; date: string; dayOfWeek: number; }
-interface UICoach { id: string; name: string; short: string; weapons: Weapon[]; maitre: boolean; blurb: string; next: string; }
+interface Day { id: string; dow: string; dom: string; label?: string; date: string; avDay: (typeof AVAIL_DAYS)[number] | null; }
+interface UICoach { id: string; name: string; short: string; weapons: Weapon[]; maitre: boolean; blurb: string; availability: Coach['availability_json']; }
 
 function buildDays(): Day[] {
   const DOWS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -45,7 +31,8 @@ function buildDays(): Day[] {
     const d = new Date(today);
     d.setDate(today.getDate() + offset);
     if (d.getDay() !== 0) {
-      days.push({ id: `d${offset}`, dow: DOWS[d.getDay()], dom: String(d.getDate()), label: offset === 0 ? 'Today' : undefined, date: isoDate(d), dayOfWeek: d.getDay() });
+      // getDay() is 1..6 here (Sunday excluded above) — AVAIL_DAYS is Mon..Sat, 0-indexed.
+      days.push({ id: `d${offset}`, dow: DOWS[d.getDay()], dom: String(d.getDate()), label: offset === 0 ? 'Today' : undefined, date: isoDate(d), avDay: AVAIL_DAYS[d.getDay() - 1] });
     }
     offset++;
   }
@@ -57,31 +44,19 @@ function coachShort(name: string) {
   return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(' ')}` : name;
 }
 
-function mapDbCoach(c: Pick<Coach, 'id' | 'name' | 'weapon' | 'maitre' | 'blurb'>, days: Day[]): UICoach {
-  const sched = COACH_SCHEDULE[c.id] || {};
-  const nextDay = days.find((d) => (sched[d.dayOfWeek] || []).length > 0);
-  const nextSlot = nextDay ? (sched[nextDay.dayOfWeek] || [])[0] : null;
-  const next = nextDay && nextSlot ? `${nextDay.label || nextDay.dow + ' ' + nextDay.dom} ${nextSlot.t}` : '';
-  return { id: c.id, name: c.name, short: coachShort(c.name), weapons: c.weapon ? [c.weapon] : ['sabre'], maitre: c.maitre || false, blurb: c.blurb || '', next };
+function mapDbCoach(c: Coach): UICoach {
+  return { id: c.id, name: c.name, short: coachShort(c.name), weapons: c.weapon ? [c.weapon] : ['sabre'], maitre: c.maitre || false, blurb: c.blurb || '', availability: c.availability_json ?? null };
 }
 
-function buildSlots(ids: string[], days: Day[]) {
-  const s: Record<string, { t: string; piste: string }[]> = {};
-  for (const id of ids) {
-    const sched = COACH_SCHEDULE[id] || {};
-    for (const day of days) {
-      const daySlots = sched[day.dayOfWeek] || [];
-      if (daySlots.length) s[`${id}|${day.id}`] = daySlots;
-    }
-  }
-  return s;
+/** Open slots for one coach on one day: their weekly availability grid, minus a
+ * day-of-week blackout, minus times another athlete already booked. */
+function slotsForCoachDay(coach: UICoach, day: Day, bookedTimes: Set<string>): { t: string; piste: string }[] {
+  const av = coach.availability;
+  if (!day.avDay || !av?.slots || av.blackout?.[day.avDay]) return [];
+  return AVAIL_SLOTS.filter((s) => av.slots[`${day.avDay}|${s}`] && !bookedTimes.has(s)).map((t) => ({ t, piste: PISTE_NAME }));
 }
 
 const DAYS = buildDays();
-const FALLBACK = [
-  { id: 'sandu', name: 'Constantin Sandu', weapon: 'sabre' as Weapon, maitre: true, blurb: 'Sabre · technique' },
-  { id: 'dina', name: 'Lucian Dina', weapon: 'sabre' as Weapon, maitre: false, blurb: 'Sabre · footwork & tactics' },
-];
 
 function StepDots({ step }: { step: number }) {
   const t = useTheme();
@@ -142,8 +117,9 @@ export default function BookFlow() {
   const pager = useRef<PagerView>(null);
   const { credits, book } = useAthlete();
   const [step, setStep] = useState(0);
-  const [coaches, setCoaches] = useState<UICoach[]>(() => FALLBACK.map((c) => mapDbCoach(c, DAYS)));
-  const [slots, setSlots] = useState(() => buildSlots(FALLBACK.map((c) => c.id), DAYS));
+  const [coaches, setCoaches] = useState<UICoach[]>([]);
+  const [slots, setSlots] = useState<Record<string, { t: string; piste: string }[]>>({});
+  const [loadingCoaches, setLoadingCoaches] = useState(true);
   const [coachId, setCoachId] = useState<string | null>(null);
   const [dayId, setDayId] = useState(DAYS[0]?.id || 'd0');
   const [slotIdx, setSlotIdx] = useState<number | null>(null);
@@ -152,12 +128,49 @@ export default function BookFlow() {
   const [bookError, setBookError] = useState<string | null>(null);
 
   useEffect(() => {
-    db.getCoaches().then((data) => {
-      if (!data?.length) return;
-      setCoaches(data.map((c) => mapDbCoach(c, DAYS)));
-      setSlots(buildSlots(data.map((c) => c.id), DAYS));
-    }).catch(() => {});
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await db.getCoaches();
+        if (cancelled) return;
+        const list = rows.map(mapDbCoach);
+        const from = DAYS[0].date, to = DAYS[DAYS.length - 1].date;
+        const bookingsByCoach = await Promise.all(list.map((c) => db.getBookingsForCoachInRange(c.id, from, to).catch(() => [] as Booking[])));
+        if (cancelled) return;
+        const bookedByCoachDay: Record<string, Set<string>> = {};
+        list.forEach((c, i) => {
+          bookingsByCoach[i].forEach((bk) => {
+            if (!bk.slot_date || !bk.slot_time) return;
+            const key = `${c.id}|${bk.slot_date}`;
+            (bookedByCoachDay[key] ??= new Set()).add(bk.slot_time.slice(0, 5));
+          });
+        });
+        const s: Record<string, { t: string; piste: string }[]> = {};
+        list.forEach((c) => {
+          DAYS.forEach((d) => {
+            const daySlots = slotsForCoachDay(c, d, bookedByCoachDay[`${c.id}|${d.date}`] || new Set());
+            if (daySlots.length) s[`${c.id}|${d.id}`] = daySlots;
+          });
+        });
+        setCoaches(list);
+        setSlots(s);
+      } catch {
+        setCoaches([]);
+        setSlots({});
+      } finally {
+        if (!cancelled) setLoadingCoaches(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
+
+  const nextSlotLabel = (id: string) => {
+    for (const d of DAYS) {
+      const s = slots[`${id}|${d.id}`];
+      if (s?.length) return `${d.label || d.dow + ' ' + d.dom} ${s[0].t}`;
+    }
+    return '';
+  };
 
   // Screens stay mounted across tab navigation — reset to a fresh flow every
   // time this screen gains focus, so a finished/mid-flow booking doesn't
@@ -232,7 +245,16 @@ export default function BookFlow() {
         {/* Step 1 · coach */}
         <View key="coach">
           <ScrollView contentContainerStyle={{ padding: 16, gap: 10 }} showsVerticalScrollIndicator={false}>
-            {coaches.map((c) => {
+            {loadingCoaches ? (
+              <View style={{ alignItems: 'center', padding: 60 }}>
+                <Text color={t.colors.faint} size={13}>Loading coaches…</Text>
+              </View>
+            ) : coaches.length === 0 ? (
+              <View style={{ alignItems: 'center', padding: 60 }}>
+                <Text variant="display" size={18}>No coaches available</Text>
+                <Text color={t.colors.muted} size={13} style={{ marginTop: 4, textAlign: 'center' }}>Check back later or contact the club.</Text>
+              </View>
+            ) : coaches.map((c) => {
               const sel = coachId === c.id;
               return (
                 <Pressable key={c.id} onPress={() => { setCoachId(c.id); setSlotIdx(null); setTimeout(() => go(1), 120); }} style={{ flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: sel ? t.colors.brandTint : t.colors.surface, borderWidth: 1, borderColor: sel ? t.colors.brand : t.colors.hairline, borderRadius: t.radius.card, padding: 14 }}>
@@ -246,7 +268,7 @@ export default function BookFlow() {
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 6 }}>
                     <View style={{ flexDirection: 'row', gap: 4 }}>{c.weapons.map((w) => <WeaponGlyph key={w} type={w} size={20} color={t.colors.steel} />)}</View>
-                    <Text variant="mono" color={t.colors.faint} size={11}>{c.next}</Text>
+                    <Text variant="mono" color={t.colors.faint} size={11}>{nextSlotLabel(c.id)}</Text>
                   </View>
                 </Pressable>
               );

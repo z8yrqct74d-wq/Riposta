@@ -2,7 +2,7 @@ import React from 'react';
 import { isoDate } from '@riposte/core';
 import { Icon, Avatar, WeaponGlyph } from '../../components/Shared';
 import { ChromeWindow } from '../../components/BrowserWindow';
-import { PISTES, CAL_START, CAL_END, INITIAL_BLOCKS, KIND } from '../../data/adminData';
+import { PISTES, CAL_START, CAL_END, KIND } from '../../data/adminData';
 import { ResourceCalendar, findConflicts } from './AdminCalendar';
 import { AdminDashboard, AdminMembers } from './AdminViews';
 import { MemberDetail } from './AdminMemberDetail';
@@ -236,7 +236,7 @@ function AdminApp() {
   const [nav, setNav] = React.useState('calendar');
   const [view, setView] = React.useState('Day');
   const [selectedDate, setSelectedDate] = React.useState(() => isoDate());
-  const [blocks, setBlocks] = React.useState(() => INITIAL_BLOCKS.map(b => ({ ...b, date: isoDate() })));
+  const [blocks, setBlocks] = React.useState([]);
   const [coaches, setCoaches] = React.useState([]);
   const [draft, setDraft] = React.useState(null);
   const [panelConflict, setPanelConflict] = React.useState(null);
@@ -253,10 +253,9 @@ function AdminApp() {
   // Load the selected day's blocks from Supabase whenever the date changes.
   React.useEffect(() => {
     let cancelled = false;
-    const demoFallback = () => selectedDate === isoDate() ? INITIAL_BLOCKS.map(b => ({ ...b, date: selectedDate })) : [];
     getCalendarBlocks(selectedDate)
-      .then(data => { if (!cancelled) setBlocks(data.length ? data : demoFallback()); })
-      .catch(() => { if (!cancelled) setBlocks(demoFallback()); });
+      .then(data => { if (!cancelled) setBlocks(data); })
+      .catch(() => { if (!cancelled) setBlocks([]); });
     return () => { cancelled = true; };
   }, [selectedDate]);
 

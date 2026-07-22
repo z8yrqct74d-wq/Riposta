@@ -17,16 +17,3 @@ export const KIND = {
   group:  { label: 'Group',        fg: 'var(--steel)', bg: 'var(--steel-tint)', bar: 'var(--steel)' },
   open:   { label: 'Open fencing', fg: 'var(--muted)', bg: 'var(--paper)',      bar: 'var(--hairline)' },
 };
-
-export const COACH = {
-  sandu:  { name: 'C. Sandu',  maitre: false },
-  dina:   { name: 'L. Dina',   maitre: false },
-};
-
-export const INITIAL_BLOCKS = [
-  { id: 'b1', piste: 'p1', kind: 'group',  start: 16*60+30, dur: 60,  title: 'Sabre · U14',    coach: 'sandu', weapon: 'sabre' },
-  { id: 'b2', piste: 'p1', kind: 'lesson', start: 18*60,    dur: 45,  title: 'Maya Rocha',     coach: 'sandu', weapon: 'sabre' },
-  { id: 'b3', piste: 'p1', kind: 'open',   start: 17*60,    dur: 60,  title: 'Open fencing',   coach: null,   weapon: null    },
-  { id: 'b4', piste: 'p1', kind: 'lesson', start: 19*60+30, dur: 45,  title: 'Tomas Király',   coach: 'dina',  weapon: 'sabre' },
-  { id: 'b5', piste: 'p1', kind: 'group',  start: 20*60+30, dur: 60,  title: 'Sabre squad',    coach: 'dina',  weapon: 'sabre', live: true },
-];
