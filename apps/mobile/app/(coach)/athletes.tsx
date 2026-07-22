@@ -6,6 +6,7 @@ import { Text, Avatar } from '../../src/components/ui';
 import { Icon } from '../../src/components/Icon';
 import { WeaponGlyph } from '../../src/components/WeaponGlyph';
 import { db } from '../../src/lib/supabase';
+import { isoDate } from '@riposte/core';
 import type { Member } from '@riposte/core';
 
 interface Row extends Member { lastSeen: string; att: number; streak: number; }
@@ -18,8 +19,8 @@ export default function CoachAthletes() {
   useEffect(() => {
     Promise.all([db.getMembers(), db.getAllBookingsLight()]).then(([members, allBk]) => {
       const now = new Date();
-      const today = now.toISOString().split('T')[0];
-      const yesterday = new Date(now.getTime() - 86400000).toISOString().split('T')[0];
+      const today = isoDate(now);
+      const yesterday = isoDate(new Date(now.getTime() - 86400000));
       setAthletes(members.map((m) => {
         const mb = allBk.filter((b) => b.member_id === m.id);
         const past = mb.filter((b) => (b.slot_date || '') <= today).sort((a, b) => (b.slot_date || '').localeCompare(a.slot_date || ''));
@@ -29,7 +30,7 @@ export default function CoachAthletes() {
           lastSeen = d === today ? 'Today' : d === yesterday ? 'Yesterday' : new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
         }
         const w12ago = new Date(now); w12ago.setDate(now.getDate() - 84);
-        const w12str = w12ago.toISOString().split('T')[0];
+        const w12str = isoDate(w12ago);
         const recent = mb.filter((b) => (b.slot_date || '') >= w12str && (b.slot_date || '') <= today);
         const weeks = new Set(recent.map((b) => Math.floor((new Date((b.slot_date || '') + 'T12:00:00').getTime() - w12ago.getTime()) / (7 * 86400000))));
         const att = Math.round((weeks.size / 12) * 100);
@@ -37,7 +38,7 @@ export default function CoachAthletes() {
         for (let w = 0; w < 12; w++) {
           const ws = new Date(now); ws.setDate(now.getDate() - ((now.getDay() + 6) % 7) - w * 7); ws.setHours(0, 0, 0, 0);
           const we = new Date(ws); we.setDate(ws.getDate() + 6); we.setHours(23, 59, 59, 999);
-          const wsStr = ws.toISOString().split('T')[0]; const weStr = we.toISOString().split('T')[0];
+          const wsStr = isoDate(ws); const weStr = isoDate(we);
           if (mb.some((b) => (b.slot_date || '') >= wsStr && (b.slot_date || '') <= weStr)) streak++; else break;
         }
         return { ...m, lastSeen, att, streak };

@@ -18,7 +18,8 @@ interface AthleteDataValue {
   upcoming: Booking[];
   loading: boolean;
   refresh: () => Promise<void>;
-  book: (slot: BookingSlot) => Promise<void>;
+  /** Returns true if the booking was actually written, false on failure. */
+  book: (slot: BookingSlot) => Promise<boolean>;
 }
 
 const Ctx = createContext<AthleteDataValue | undefined>(undefined);
@@ -61,9 +62,10 @@ export function AthleteDataProvider({ children }: { children: React.ReactNode })
     } catch { /* ignore */ }
   }, [memberId]);
 
-  const book = useCallback(async (slot: BookingSlot) => {
-    if (!memberId) return;
+  const book = useCallback(async (slot: BookingSlot): Promise<boolean> => {
+    if (!memberId) return false;
     setCredits((c) => c - 1); // optimistic
+    let ok = true;
     try {
       await db.createBooking({
         member_id: memberId,
@@ -73,10 +75,11 @@ export function AthleteDataProvider({ children }: { children: React.ReactNode })
         piste: slot.piste ?? null,
         weapon: (slot.weapon as Booking['weapon']) ?? null,
       });
-      await refresh();
     } catch {
-      await refresh();
+      ok = false; // revert the optimistic decrement below via refresh()
     }
+    await refresh(); // re-syncs credits/upcoming from the server either way
+    return ok;
   }, [memberId, refresh]);
 
   return (

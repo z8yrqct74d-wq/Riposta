@@ -70,6 +70,7 @@ export default function Onboarding() {
   const [step, setStep] = useState(0);
   const [role, setRole] = useState<Role>('athlete');
   const [signingIn, setSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
   const { signInWithGoogle } = useAuth();
 
   const isCoach = role === 'coach';
@@ -81,7 +82,14 @@ export default function Onboarding() {
 
   const signIn = async () => {
     setSigningIn(true);
-    try { await signInWithGoogle(role); } finally { setSigningIn(false); }
+    setSignInError(null);
+    try {
+      await signInWithGoogle(role);
+    } catch {
+      setSignInError("Sign-in didn't complete — please try again.");
+    } finally {
+      setSigningIn(false);
+    }
   };
 
   const panel = { width, paddingHorizontal: 24, paddingTop: 56, paddingBottom: 170 } as const;
@@ -183,6 +191,9 @@ export default function Onboarding() {
             <View key={i} style={{ height: 5, borderRadius: 3, width: i === step ? 22 : 5, backgroundColor: isDark ? '#fff' : light.brand, opacity: i === step ? 1 : 0.22 }} />
           ))}
         </View>
+        {signInError && isLogin && (
+          <Text color="#E2616C" size={12.5} style={{ textAlign: 'center', marginBottom: 10 }}>{signInError}</Text>
+        )}
         <View style={{ flexDirection: 'row', gap: 10 }}>
           {step === 0 ? (
             <Pressable onPress={() => go(3)} style={{ flex: 1, padding: 14, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center' }}>

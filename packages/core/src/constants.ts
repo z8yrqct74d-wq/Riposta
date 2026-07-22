@@ -68,7 +68,16 @@ export function mondayIndex(date: Date = new Date()): number {
   return (date.getDay() + 6) % 7;
 }
 
-/** YYYY-MM-DD for a date (local-agnostic, ISO date part). */
+/**
+ * YYYY-MM-DD for a date, using LOCAL calendar fields (not UTC). Use this for
+ * "today" — `date.toISOString().split('T')[0]` gives the UTC date, which is
+ * wrong for most of the day in timezones ahead of UTC (e.g. Bucharest,
+ * UTC+2/+3): from local midnight until the UTC day rolls over, it reports
+ * yesterday's date.
+ */
 export function isoDate(date: Date = new Date()): string {
-  return date.toISOString().split('T')[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }

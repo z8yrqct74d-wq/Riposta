@@ -9,6 +9,7 @@ import { WeaponGlyph } from '../../src/components/WeaponGlyph';
 import { CoachHeader } from '../../src/coach/CoachHeader';
 import { db } from '../../src/lib/supabase';
 import { useCoach } from '../../src/coach/CoachData';
+import { isoDate } from '@riposte/core';
 import type { Member, AttendanceStatus, Weapon } from '@riposte/core';
 
 interface RosterMember { id: string; name: string; category?: string | null; weapon?: Weapon | null; dropin?: boolean; }
@@ -53,7 +54,7 @@ export default function SessionAttendance() {
   const [sheet, setSheet] = useState(false);
   const [dropName, setDropName] = useState('');
   const [saving, setSaving] = useState(false);
-  const today = new Date().toISOString().split('T')[0];
+  const today = isoDate();
 
   useEffect(() => {
     let cancelled = false;
@@ -83,7 +84,11 @@ export default function SessionAttendance() {
     if (!item?.blockId) { router.back(); return; }
     setSaving(true);
     try {
-      await Promise.all(members.filter((m) => att[m.id]).map((m) => db.upsertSessionAttendance({ block_id: item.blockId!, session_date: today, member_id: m.id, status: att[m.id], is_dropin: false })));
+      const memberWrites = members.filter((m) => att[m.id]).map((m) =>
+        db.upsertSessionAttendance({ block_id: item.blockId!, session_date: today, member_id: m.id, status: att[m.id], is_dropin: false }));
+      const dropInWrites = dropIns.filter((p) => att[p.id]).map((p) =>
+        db.upsertSessionAttendance({ block_id: item.blockId!, session_date: today, member_id: null, status: att[p.id], is_dropin: true, dropin_name: p.name }));
+      await Promise.all([...memberWrites, ...dropInWrites]);
     } catch { /* ignore */ }
     setSaving(false);
     router.back();

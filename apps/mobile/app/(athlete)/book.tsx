@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import PagerView from 'react-native-pager-view';
 import Svg, { Circle } from 'react-native-svg';
 import Animated, { useSharedValue, useAnimatedProps, withDelay, withTiming } from 'react-native-reanimated';
@@ -12,6 +12,7 @@ import { Icon } from '../../src/components/Icon';
 import { WeaponGlyph } from '../../src/components/WeaponGlyph';
 import { db } from '../../src/lib/supabase';
 import { useAthlete } from '../../src/athlete/AthleteData';
+import { isoDate } from '@riposte/core';
 import type { Coach, Weapon } from '@riposte/core';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -44,7 +45,7 @@ function buildDays(): Day[] {
     const d = new Date(today);
     d.setDate(today.getDate() + offset);
     if (d.getDay() !== 0) {
-      days.push({ id: `d${offset}`, dow: DOWS[d.getDay()], dom: String(d.getDate()), label: offset === 0 ? 'Today' : undefined, date: d.toISOString().split('T')[0], dayOfWeek: d.getDay() });
+      days.push({ id: `d${offset}`, dow: DOWS[d.getDay()], dom: String(d.getDate()), label: offset === 0 ? 'Today' : undefined, date: isoDate(d), dayOfWeek: d.getDay() });
     }
     offset++;
   }
@@ -148,6 +149,7 @@ export default function BookFlow() {
   const [slotIdx, setSlotIdx] = useState<number | null>(null);
   const [booked, setBooked] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [bookError, setBookError] = useState<string | null>(null);
 
   useEffect(() => {
     db.getCoaches().then((data) => {
@@ -157,6 +159,22 @@ export default function BookFlow() {
     }).catch(() => {});
   }, []);
 
+  // Screens stay mounted across tab navigation — reset to a fresh flow every
+  // time this screen gains focus, so a finished/mid-flow booking doesn't
+  // resurface on the next "Book a lesson" tap.
+  useFocusEffect(useCallback(() => {
+    return () => {
+      setStep(0);
+      pager.current?.setPage(0);
+      setCoachId(null);
+      setDayId(DAYS[0]?.id || 'd0');
+      setSlotIdx(null);
+      setBooked(false);
+      setConfirming(false);
+      setBookError(null);
+    };
+  }, []));
+
   const go = (s: number) => { setStep(s); pager.current?.setPage(s); };
   const coach = coaches.find((c) => c.id === coachId) || null;
   const daySlots = slots[`${coachId}|${dayId}`] || [];
@@ -165,8 +183,14 @@ export default function BookFlow() {
 
   const confirm = async () => {
     setConfirming(true);
-    await book({ coachId, date: day?.date, time: slot?.t, piste: slot?.piste, weapon: coach?.weapons[0] || 'sabre' });
-    setBooked(true);
+    setBookError(null);
+    const ok = await book({ coachId, date: day?.date, time: slot?.t, piste: slot?.piste, weapon: coach?.weapons[0] || 'sabre' });
+    setConfirming(false);
+    if (ok) {
+      setBooked(true);
+    } else {
+      setBookError("Couldn't complete the booking — please check your connection and try again.");
+    }
   };
 
   const headers = ['Pick a coach', 'Choose a time', 'Confirm'];
@@ -307,7 +331,12 @@ export default function BookFlow() {
       )}
       {step === 2 && (
         <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: t.colors.hairline, backgroundColor: t.colors.surface }}>
-          <PrimaryBtn label={confirming ? 'Booking…' : 'Confirm — use 1 credit'} disabled={confirming} onPress={confirm} />
+          {bookError && <Text color={t.colors.danger} size={12.5} style={{ marginBottom: 10 }}>{bookError}</Text>}
+          <PrimaryBtn
+            label={confirming ? 'Booking…' : credits <= 0 ? 'No credits available' : 'Confirm — use 1 credit'}
+            disabled={confirming || credits <= 0}
+            onPress={confirm}
+          />
         </View>
       )}
     </SafeAreaView>

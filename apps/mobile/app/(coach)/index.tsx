@@ -9,6 +9,7 @@ import { WeaponGlyph } from '../../src/components/WeaponGlyph';
 import { db } from '../../src/lib/supabase';
 import { useCoach } from '../../src/coach/CoachData';
 import type { CoachItem } from '../../src/coach/CoachData';
+import { isoDate } from '@riposte/core';
 import type { CalendarBlock, Booking, Weapon } from '@riposte/core';
 
 type CView = 'Day' | 'Week' | 'Month';
@@ -118,7 +119,7 @@ export default function MyDay() {
   const [selDay, setSelDay] = useState(new Date().getDate());
 
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = isoDate(today);
   const todayLabel = today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const CKIND: Record<string, string> = { lesson: t.colors.brand, group: t.colors.steel, open: t.colors.hairline };

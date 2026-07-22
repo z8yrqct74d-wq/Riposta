@@ -7,6 +7,7 @@ import { Text } from '../../src/components/ui';
 import { Icon } from '../../src/components/Icon';
 import { db } from '../../src/lib/supabase';
 import { useAthlete } from '../../src/athlete/AthleteData';
+import { isoDate } from '@riposte/core';
 import type { Booking, LessonNote } from '@riposte/core';
 
 const COACH_MAP: Record<string, string> = { sandu: 'C. Sandu', dina: 'L. Dina' };
@@ -18,7 +19,7 @@ function buildDay(all: Booking[]) {
   const out: { label: string; att: boolean; count: number }[] = [];
   for (let d = 29; d >= 0; d--) {
     const day = new Date(now); day.setDate(now.getDate() - d); day.setHours(0, 0, 0, 0);
-    const s = day.toISOString().split('T')[0];
+    const s = isoDate(day);
     out.push({ label: String(day.getDate()), att: all.some((b) => b.slot_date === s && b.status !== 'cancelled'), count: 0 });
   }
   return out;

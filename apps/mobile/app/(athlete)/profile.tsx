@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { WEAPON_LABEL, VISA_STATUS } from '@riposte/core';
+import { WEAPON_LABEL, VISA_STATUS, isoDate } from '@riposte/core';
 import type { Weapon, VisaStatus, Member, EmergencyContact } from '@riposte/core';
 import { useTheme } from '../../src/theme/theme';
 import { Text, Avatar, Sheet, Button } from '../../src/components/ui';
@@ -96,13 +96,20 @@ function OptionSheet({ title, options, value, onSelect, onClose }: { title: stri
   );
 }
 
-function DateSheet({ initial, onSave, onClose }: { initial?: string | null; onSave: (v: string) => void; onClose: () => void }) {
+function DateSheet({ initial, onSave, onClose, mode = 'past' }: { initial?: string | null; onSave: (v: string) => void; onClose: () => void; mode?: 'past' | 'future' }) {
   const t = useTheme();
   const [date, setDate] = useState<Date>(initial ? new Date(initial + 'T12:00:00') : new Date(2005, 0, 1));
   return (
     <Sheet visible onClose={onClose} title="Select date">
-      <DateTimePicker value={date} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} maximumDate={new Date()} onChange={(_e, d) => d && setDate(d)} />
-      <Button label="Save" onPress={() => { onSave(date.toISOString().split('T')[0]); onClose(); }} style={{ marginTop: 12 }} />
+      <DateTimePicker
+        value={date}
+        mode="date"
+        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+        maximumDate={mode === 'past' ? new Date() : undefined}
+        minimumDate={mode === 'future' ? new Date() : undefined}
+        onChange={(_e, d) => d && setDate(d)}
+      />
+      <Button label="Save" onPress={() => { onSave(isoDate(date)); onClose(); }} style={{ marginTop: 12 }} />
     </Sheet>
   );
 }
@@ -152,7 +159,7 @@ function DocumentSheet({ type, member, memberId, onClose, onSaved }: { type: 'me
         </View>
         <Button label={saving ? 'Saving…' : 'Save'} onPress={save} disabled={saving} />
       </View>
-      {showDate && <DateSheet initial={expiry} onSave={setExpiry} onClose={() => setShowDate(false)} />}
+      {showDate && <DateSheet initial={expiry} onSave={setExpiry} onClose={() => setShowDate(false)} mode="future" />}
     </Sheet>
   );
 }
@@ -185,6 +192,8 @@ function EmergencyContacts({ memberId, onClose }: { memberId: string; onClose: (
   const t = useTheme();
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
   const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
   const [phone, setPhone] = useState('');
@@ -193,9 +202,18 @@ function EmergencyContacts({ memberId, onClose }: { memberId: string; onClose: (
   useEffect(() => { load(); }, [memberId]);
 
   const add = async () => {
-    if (!name.trim()) return;
-    await db.addEmergencyContact({ member_id: memberId, name: name.trim(), role: role.trim() || null, phone: phone.trim() || null, is_primary: contacts.length === 0 });
-    setName(''); setRole(''); setPhone(''); setAdding(false); load();
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    setAddError(null);
+    try {
+      await db.addEmergencyContact({ member_id: memberId, name: name.trim(), role: role.trim() || null, phone: phone.trim() || null, is_primary: contacts.length === 0 });
+      setName(''); setRole(''); setPhone(''); setAdding(false);
+      await load();
+    } catch {
+      setAddError("Couldn't add contact — please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
   const remove = async (id: string) => { await db.deleteEmergencyContact(id); load(); };
   const makePrimary = async (id: string) => { await db.setPrimaryContact(memberId, id); load(); };
@@ -232,7 +250,8 @@ function EmergencyContacts({ memberId, onClose }: { memberId: string; onClose: (
               <TextInput value={name} onChangeText={setName} placeholder="Name" placeholderTextColor={t.colors.faint} style={field} />
               <TextInput value={role} onChangeText={setRole} placeholder="Relationship (e.g. Parent)" placeholderTextColor={t.colors.faint} style={field} />
               <TextInput value={phone} onChangeText={setPhone} placeholder="Phone" placeholderTextColor={t.colors.faint} keyboardType="phone-pad" style={field} />
-              <Button label="Add contact" onPress={add} />
+              {addError && <Text color={t.colors.danger} size={12.5}>{addError}</Text>}
+              <Button label={saving ? 'Adding…' : 'Add contact'} onPress={add} disabled={saving} />
             </View>
           ) : (
             <Pressable onPress={() => setAdding(true)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, padding: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: t.colors.hairline, borderRadius: t.radius.card }}>

@@ -18,6 +18,13 @@ export default function Availability() {
   const [blackout, setBlackout] = useState<Record<string, boolean>>({});
   const ready = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirror the latest values + a save-pending flag in refs so the unmount
+  // cleanup below (which only fires once, with a stale closure otherwise)
+  // can flush the last edit instead of just dropping it.
+  const latest = useRef({ grid, blackout, coachId: coach?.id, pending: false });
+  latest.current.grid = grid;
+  latest.current.blackout = blackout;
+  latest.current.coachId = coach?.id;
 
   useEffect(() => {
     if (!coach?.id) return;
@@ -30,9 +37,23 @@ export default function Availability() {
   useEffect(() => {
     if (!ready.current || !coach?.id) return;
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => { db.updateCoachAvailability(coach.id, { slots: grid, blackout }).catch(() => {}); }, 1000);
+    latest.current.pending = true;
+    timer.current = setTimeout(() => {
+      latest.current.pending = false;
+      db.updateCoachAvailability(coach.id, { slots: grid, blackout }).catch(() => {});
+    }, 1000);
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [grid, blackout, coach?.id]);
+
+  // Flush a still-pending debounced save on unmount (e.g. sign-out or
+  // navigating away right after a toggle) instead of silently losing it.
+  useEffect(() => {
+    return () => {
+      if (latest.current.pending && latest.current.coachId) {
+        db.updateCoachAvailability(latest.current.coachId, { slots: latest.current.grid, blackout: latest.current.blackout }).catch(() => {});
+      }
+    };
+  }, []);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.colors.paper }}>

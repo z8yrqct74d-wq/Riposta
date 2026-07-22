@@ -32,17 +32,22 @@ function PlanEditor({ plan, onClose, onSave, onDelete }) {
   const isNew = !plan?.id;
   const [form, setForm] = React.useState({ name: '', sub: '', price: '', credits: 0, description: '', ...plan });
   const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState(null);
   const set = (patch) => setForm(f => ({ ...f, ...patch }));
   const field = { width: '100%', padding: '9px 11px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'var(--paper)', font: 'inherit', fontSize: 13.5, color: 'var(--ink)', boxSizing: 'border-box' };
 
   const submit = async () => {
-    if (!form.name.trim()) return;
+    if (!form.name.trim()) { setError('Name is required.'); return; }
+    setError(null);
     setSaving(true);
     try {
       if (isNew) await onSave({ id: slugify(form.name), name: form.name.trim(), sub: form.sub, price: form.price, credits: Number(form.credits) || 0, description: form.description }, true);
       else await onSave({ name: form.name.trim(), sub: form.sub, price: form.price, credits: Number(form.credits) || 0, description: form.description }, false, plan.id);
       onClose();
-    } catch { setSaving(false); }
+    } catch (e) {
+      setError(e?.message?.includes('duplicate') ? 'A plan with this name already exists.' : (e?.message || 'Could not save plan.'));
+      setSaving(false);
+    }
   };
 
   return (
@@ -59,6 +64,9 @@ function PlanEditor({ plan, onClose, onSave, onDelete }) {
           ))}
           <div><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Lesson credits</div><input type="number" value={form.credits} onChange={e => set({ credits: e.target.value })} className="r-focusable" style={field} /></div>
           <div><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Description</div><textarea value={form.description || ''} onChange={e => set({ description: e.target.value })} className="r-focusable" style={{ ...field, minHeight: 72, resize: 'vertical' }} /></div>
+        </div>
+        <div style={{ padding: '0 20px' }}>
+          {error && <div style={{ marginBottom: 4, fontSize: 12.5, color: 'var(--danger)' }}>{error}</div>}
         </div>
         <div style={{ display: 'flex', gap: 10, padding: 20, borderTop: '1px solid var(--hairline)' }}>
           {!isNew && <button onClick={() => onDelete(plan.id)} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', padding: '11px 14px', borderRadius: 'var(--r-btn)', border: '1px solid var(--danger)', background: 'transparent', color: 'var(--danger)', fontSize: 13.5, fontWeight: 600 }}>Delete</button>}

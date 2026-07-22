@@ -15,6 +15,7 @@ import type {
   Settings,
   Payment,
 } from './types';
+import { isoDate } from './constants';
 
 /**
  * Turn a platform-agnostic {@link UploadInput} into an `ArrayBuffer` + content
@@ -111,11 +112,31 @@ export function createDb(supabase: SupabaseClient) {
   async function updateCalendarBlock(id: string, changes: Partial<CalendarBlock>): Promise<void> {
     const patch: Record<string, unknown> = {};
     if (changes.start !== undefined) patch.start_min = changes.start;
-    if (changes.dur !== undefined && changes.start !== undefined) patch.end_min = changes.start + changes.dur;
     if (changes.title !== undefined) patch.title = changes.title;
     if (changes.coach !== undefined) patch.coach = changes.coach;
     if (changes.kind !== undefined) patch.kind = changes.kind;
     if (changes.weapon !== undefined) patch.weapon = changes.weapon;
+
+    // end_min = start + dur, but a caller may only move (start) or only
+    // resize (dur) a block — fetch the current row for whichever side is
+    // missing so end_min never desyncs from the block's actual duration.
+    if (changes.start !== undefined || changes.dur !== undefined) {
+      let currentStart: number | undefined;
+      let currentDur: number | undefined;
+      if (changes.start === undefined || changes.dur === undefined) {
+        const { data, error: fetchError } = await supabase
+          .from('calendar_blocks')
+          .select('start_min, end_min')
+          .eq('id', id)
+          .single();
+        if (fetchError) throw fetchError;
+        currentStart = data.start_min;
+        currentDur = data.end_min - data.start_min;
+      }
+      const start = changes.start ?? currentStart ?? 0;
+      const dur = changes.dur ?? currentDur ?? 0;
+      patch.end_min = start + dur;
+    }
 
     const { error } = await supabase.from('calendar_blocks').update(patch).eq('id', id);
     if (error) throw error;
@@ -149,7 +170,7 @@ export function createDb(supabase: SupabaseClient) {
   }
 
   async function getUpcomingBookings(memberId: string): Promise<Booking[]> {
-    const today = new Date().toISOString().split('T')[0];
+    const today = isoDate();
     const { data, error } = await supabase
       .from('bookings')
       .select('*, coaches(name)')
@@ -290,10 +311,10 @@ export function createDb(supabase: SupabaseClient) {
     const dow = (today.getDay() + 6) % 7;
     const mon = new Date(today);
     mon.setDate(today.getDate() - dow);
-    const monStr = mon.toISOString().split('T')[0];
+    const monStr = isoDate(mon);
     const sun = new Date(mon);
     sun.setDate(mon.getDate() + 6);
-    const sunStr = sun.toISOString().split('T')[0];
+    const sunStr = isoDate(sun);
     const { data, error } = await supabase
       .from('bookings')
       .select('id, attendance_status')

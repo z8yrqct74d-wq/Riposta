@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { PAYMENT_STATUS } from '@riposte/core';
+import { PAYMENT_STATUS, isoDate } from '@riposte/core';
 import type { Booking } from '@riposte/core';
 import { useTheme } from '../../src/theme/theme';
 import { Text, Pill, ColorBarRow } from '../../src/components/ui';
@@ -19,8 +19,8 @@ function coachShortName(fullName?: string | null) {
 
 function bookingDayLabel(b: Booking) {
   if (!b?.slot_date) return 'Today';
-  const today = new Date().toISOString().split('T')[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const today = isoDate();
+  const tomorrow = isoDate(new Date(Date.now() + 86400000));
   const DOWS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const d = new Date(b.slot_date + 'T12:00:00');
   if (b.slot_date === today) return 'Today';

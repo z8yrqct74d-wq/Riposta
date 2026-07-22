@@ -274,7 +274,7 @@ function AdminApp() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
         {selMember ? (
           <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
-            <MemberDetail member={selMember} onBack={() => setSelMember(null)} />
+            <MemberDetail key={selMember?.id} member={selMember} onBack={() => setSelMember(null)} />
           </div>
         ) : (
           <>

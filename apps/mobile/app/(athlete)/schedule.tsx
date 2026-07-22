@@ -6,6 +6,7 @@ import { Text, ColorBarRow, Sheet } from '../../src/components/ui';
 import { WeaponGlyph } from '../../src/components/WeaponGlyph';
 import { db } from '../../src/lib/supabase';
 import { useAthlete } from '../../src/athlete/AthleteData';
+import { isoDate } from '@riposte/core';
 import type { Booking } from '@riposte/core';
 
 const COACH_MAP: Record<string, string> = { sandu: 'C. Sandu', dina: 'L. Dina' };
@@ -13,7 +14,7 @@ const coachName = (b: Booking) => b.coaches?.name || COACH_MAP[b.coach_id ?? '']
 
 function bookingDayLabel(b: Booking) {
   if (!b?.slot_date) return 'Today';
-  const today = new Date().toISOString().split('T')[0];
+  const today = isoDate();
   const DOWS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const d = new Date(b.slot_date + 'T12:00:00');
   return b.slot_date === today ? 'Today' : `${DOWS[d.getDay()]} ${d.getDate()}`;

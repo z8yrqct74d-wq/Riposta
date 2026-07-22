@@ -23,18 +23,34 @@ export default function LessonView() {
   const [credits, setCredits] = useState(item?.memberCredits ?? 0);
   const [done, setDone] = useState(false);
   const [showMinus, setShowMinus] = useState(false);
+  const [marking, setMarking] = useState(false);
+  const [markError, setMarkError] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [tidying, setTidying] = useState(false);
   const [tidied, setTidied] = useState(false);
 
   const sub = item ? `${item.t}${item.piste ? ` · Piste ${item.piste}` : ''} · ${item.durMin} min` : '';
 
-  const markDone = () => {
-    setDone(true);
-    setShowMinus(true);
-    setTimeout(() => setCredits((c) => Math.max(0, c - 1)), 360);
-    if (item?.memberId) db.updateMemberCredits(item.memberId, Math.max(0, (item.memberCredits ?? 1) - 1)).catch(() => {});
-    if (item?.bookingId) db.updateBookingAttendance(item.bookingId, 'present').catch(() => {});
+  const markDone = async () => {
+    if (done || marking || !item?.memberId) return; // guard against double-tap
+    setMarking(true);
+    setMarkError(null);
+    try {
+      // Read the member's current balance fresh rather than trusting the
+      // memberCredits snapshot captured whenever MyDay last loaded — that
+      // snapshot can be stale (a top-up or another lesson since then).
+      const fresh = await db.getMember(item.memberId);
+      const nextCredits = Math.max(0, (fresh?.credits ?? item.memberCredits ?? 1) - 1);
+      await db.updateMemberCredits(item.memberId, nextCredits);
+      if (item.bookingId) await db.updateBookingAttendance(item.bookingId, 'present');
+      setDone(true);
+      setShowMinus(true);
+      setTimeout(() => setCredits(nextCredits), 360);
+    } catch {
+      setMarkError("Couldn't save — check your connection and try again.");
+    } finally {
+      setMarking(false);
+    }
   };
 
   const tidy = () => {
@@ -64,7 +80,10 @@ export default function LessonView() {
         </View>
 
         {!done ? (
-          <Button label="Mark done · use 1 credit" onPress={markDone} style={{ marginBottom: 16 }} />
+          <>
+            {markError && <Text color={t.colors.danger} size={12.5} style={{ marginBottom: 8 }}>{markError}</Text>}
+            <Button label={marking ? 'Saving…' : 'Mark done · use 1 credit'} onPress={markDone} disabled={marking} style={{ marginBottom: 16 }} />
+          </>
         ) : (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: t.radius.btn, backgroundColor: t.colors.successTint, marginBottom: 16 }}>
             <Icon name="check" size={16} color={t.colors.success} strokeWidth={2.2} />

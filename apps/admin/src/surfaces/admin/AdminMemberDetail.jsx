@@ -1,11 +1,21 @@
 import React from 'react';
 import { Icon, Avatar, PaymentPill, VisaBadge, WeaponGlyph } from '../../components/Shared';
-import { getMember, getEmergencyContacts, getBookingsForMember, getNotesForMember, getPaymentsForMember, recordPayment, updateMember, updateMemberDocument } from '../../lib/db';
+import { getMember, getEmergencyContacts, getBookingsForMember, getNotesForMember, getPaymentsForMember, getPlans, recordPayment, updateMember, updateMemberDocument } from '../../lib/db';
 
 const fmtDate = (iso, opts) => iso ? new Date(iso).toLocaleDateString('en-GB', opts || { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 const dayMonth = (iso) => iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
 const money = (n) => `€${Number(n || 0).toFixed(2)}`;
-const daysUntil = (iso) => iso ? Math.ceil((new Date(iso) - new Date()) / 86400000) : null;
+// Whole calendar days until a date-only string, using LOCAL midnight for both
+// sides — `new Date(iso)` alone parses as UTC midnight, which can be off by a
+// day vs. local "now" near the day boundary in timezones ahead of UTC.
+const daysUntil = (iso) => {
+  if (!iso) return null;
+  const [y, m, d] = iso.split('-').map(Number);
+  const target = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((target - today) / 86400000);
+};
 
 function DetailTab({ label, active, onClick, alert }) {
   return (
@@ -41,7 +51,12 @@ function CardHead({ children }) {
 
 function OverviewTab({ m, contacts }) {
   const primary = contacts.find(c => c.is_primary) || contacts[0] || null;
-  const planCredits = 6;
+  const [plans, setPlans] = React.useState([]);
+  React.useEffect(() => { getPlans().then(setPlans).catch(() => {}); }, []);
+  const matchedPlan = plans.find(p => p.name === m.plan_name);
+  // Fall back to 6 (the most common plan size) only when the member's plan
+  // isn't found in the catalogue, e.g. no plan set yet.
+  const planCredits = matchedPlan ? Math.max(matchedPlan.credits, 1) : 6;
   return (
     <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: 0 }}>
       <Card>
@@ -89,7 +104,7 @@ function OverviewTab({ m, contacts }) {
 const ATT_COLOR = { present: 'var(--success)', late: 'var(--warning)', absent: 'var(--danger)', excused: 'var(--steel)', pending: 'var(--faint)' };
 
 function AttendanceTab({ bookings }) {
-  const rows = bookings.map(b => ({
+  const rows = bookings.filter(b => b.status !== 'cancelled').map(b => ({
     d: fmtDate(b.slot_date, { weekday: 'short', day: 'numeric', month: 'short' }),
     what: b.coaches?.name ? `Lesson · ${b.coaches.name}` : 'Lesson',
     status: b.attendance_status || 'pending',
@@ -242,10 +257,16 @@ function AddPaymentPanel({ member, onClose, onRecorded }) {
   const [amount, setAmount] = React.useState('');
   const [note, setNote] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState(null);
   const field = { width: '100%', padding: '9px 11px', border: '1px solid var(--hairline)', borderRadius: 'var(--r-btn)', background: 'var(--paper)', font: 'inherit', fontSize: 13.5, color: 'var(--ink)', boxSizing: 'border-box' };
 
   const submit = async () => {
-    const amt = Number(amount) || 0;
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      setError(kind === 'topup' ? 'Enter a positive number of credits.' : 'Enter a positive amount.');
+      return;
+    }
+    setError(null);
     setSaving(true);
     try {
       await recordPayment({
@@ -259,7 +280,10 @@ function AddPaymentPanel({ member, onClose, onRecorded }) {
       if (kind === 'payment') await updateMember(member.id, { pay_status: 'paid' });
       await onRecorded();
       onClose();
-    } catch { setSaving(false); }
+    } catch (e) {
+      setError(e?.message || 'Could not record payment.');
+      setSaving(false);
+    }
   };
 
   return (
@@ -285,7 +309,7 @@ function AddPaymentPanel({ member, onClose, onRecorded }) {
           </div>
           <div>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>{kind === 'topup' ? 'Credits' : 'Amount (€)'}</div>
-            <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder={kind === 'topup' ? 'e.g. 5' : 'e.g. 120'} style={field} />
+            <input type="number" min="0" step="any" value={amount} onChange={e => setAmount(e.target.value)} placeholder={kind === 'topup' ? 'e.g. 5' : 'e.g. 120'} style={field} />
           </div>
           <div>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Note</div>
@@ -293,6 +317,7 @@ function AddPaymentPanel({ member, onClose, onRecorded }) {
           </div>
         </div>
         <div style={{ padding: 20, borderTop: '1px solid var(--hairline)' }}>
+          {error && <div style={{ marginBottom: 10, fontSize: 12.5, color: 'var(--danger)' }}>{error}</div>}
           <button onClick={submit} disabled={saving} className="r-focusable" style={{ width: '100%', font: 'inherit', cursor: 'pointer', padding: 12, borderRadius: 'var(--r-btn)', border: 'none', background: 'var(--brand)', color: '#fff', fontSize: 14, fontWeight: 600, opacity: saving ? 0.6 : 1 }}>{saving ? 'Recording…' : 'Record payment'}</button>
         </div>
       </div>
