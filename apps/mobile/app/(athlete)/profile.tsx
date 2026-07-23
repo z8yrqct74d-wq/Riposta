@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Pressable, ScrollView, Modal, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -25,8 +24,6 @@ const NOTIF_ITEMS: { key: string; label: string }[] = [
   { key: 'coachNotes', label: 'Coach notes' },
   { key: 'announcements', label: 'Club announcements' },
 ];
-const NOTIF_KEY = 'riposte_notif_prefs';
-
 const formatDocDate = (d?: string | null) => (d ? new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null);
 
 function getDocStatus(url?: string | null, expiryDate?: string | null): VisaStatus {
@@ -163,11 +160,14 @@ function DocumentSheet({ type, member, memberId, onClose, onSaved }: { type: 'me
   );
 }
 
-function NotifSheet({ onClose }: { onClose: () => void }) {
+function NotifSheet({ memberId, initial, onClose }: { memberId: string | null; initial?: Record<string, boolean> | null; onClose: () => void }) {
   const t = useTheme();
-  const [prefs, setPrefs] = useState<Record<string, boolean>>(() => Object.fromEntries(NOTIF_ITEMS.map((i) => [i.key, true])));
-  useEffect(() => { AsyncStorage.getItem(NOTIF_KEY).then((v) => { if (v) setPrefs((p) => ({ ...p, ...JSON.parse(v) })); }); }, []);
-  const toggle = (key: string) => setPrefs((p) => { const n = { ...p, [key]: !p[key] }; AsyncStorage.setItem(NOTIF_KEY, JSON.stringify(n)); return n; });
+  const [prefs, setPrefs] = useState<Record<string, boolean>>(() => ({ ...Object.fromEntries(NOTIF_ITEMS.map((i) => [i.key, true])), ...(initial || {}) }));
+  const toggle = (key: string) => setPrefs((p) => {
+    const n = { ...p, [key]: !p[key] };
+    if (memberId) db.updateMember(memberId, { notif_prefs: n }).catch(() => {});
+    return n;
+  });
   return (
     <Sheet visible onClose={onClose} title="Notifications">
       <View>
@@ -344,7 +344,7 @@ export default function ProfileScreen() {
       {picker && <OptionSheet title={picker.title} options={picker.options} value={member?.[picker.field] as string} onSelect={(v) => saveField(picker.field, v)} onClose={() => setPicker(null)} />}
       {dobOpen && <DateSheet initial={member?.date_of_birth} onSave={(v) => saveField('date_of_birth', v)} onClose={() => setDobOpen(false)} />}
       {docSheet && memberId && <DocumentSheet type={docSheet} member={member} memberId={memberId} onClose={() => setDocSheet(null)} onSaved={() => { refresh(); setDocSheet(null); }} />}
-      {notifOpen && <NotifSheet onClose={() => setNotifOpen(false)} />}
+      {notifOpen && <NotifSheet memberId={memberId} initial={member?.notif_prefs} onClose={() => setNotifOpen(false)} />}
       {emergencyOpen && memberId && <EmergencyContacts memberId={memberId} onClose={() => setEmergencyOpen(false)} />}
     </SafeAreaView>
   );

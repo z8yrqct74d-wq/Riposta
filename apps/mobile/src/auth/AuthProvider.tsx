@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import * as Linking from 'expo-linking';
 import type { Session } from '@supabase/supabase-js';
 import type { Role, RoleResolution } from '@riposte/core';
-import { supabase, auth } from '../lib/supabase';
+import { supabase, auth, db } from '../lib/supabase';
+import { registerForPushNotifications } from '../lib/notifications';
 
 // Finalises any in-flight auth session when the app regains focus (web/dev).
 WebBrowser.maybeCompleteAuthSession();
@@ -42,6 +44,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Best-effort push-token registration once authenticated. No-ops silently
+  // if permission is denied or no Expo push token can be obtained (e.g. no
+  // Expo project id configured yet) — the app never blocks on it.
+  const pushRegistered = useRef(false);
+  const registerPush = useCallback(async (s: Session | null) => {
+    if (!s?.user?.id || pushRegistered.current) return;
+    pushRegistered.current = true;
+    try {
+      const token = await registerForPushNotifications();
+      if (token) await db.registerDeviceToken(s.user.id, token, Platform.OS);
+    } catch { /* best-effort */ }
+  }, []);
+
   useEffect(() => {
     let active = true;
     supabase.auth.getSession().then(async ({ data }) => {
@@ -49,14 +64,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(data.session);
       await resolve(data.session);
       setLoading(false);
+      registerPush(data.session);
     });
     const { data: sub } = supabase.auth.onAuthStateChange(async (_e, s) => {
       if (!active) return;
       setSession(s);
       await resolve(s);
+      registerPush(s);
     });
     return () => { active = false; sub.subscription.unsubscribe(); };
-  }, [resolve]);
+  }, [resolve, registerPush]);
 
   const signInWithGoogle = useCallback(async (hint?: 'athlete' | 'coach') => {
     hintRef.current = hint ?? null;

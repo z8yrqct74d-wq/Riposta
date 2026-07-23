@@ -246,6 +246,24 @@ export function createDb(supabase: SupabaseClient) {
     if (error) throw error;
   }
 
+  async function updateCoachNotifPrefs(coachId: string, prefs: Record<string, boolean>): Promise<void> {
+    const { error } = await supabase.from('coaches').update({ notif_prefs: prefs }).eq('id', coachId);
+    if (error) throw error;
+  }
+
+  // ── Push device tokens ─────────────────────────────────────
+  async function registerDeviceToken(userId: string, token: string, platform?: string): Promise<void> {
+    const { error } = await supabase
+      .from('device_tokens')
+      .upsert({ user_id: userId, expo_push_token: token, platform, updated_at: new Date().toISOString() }, { onConflict: 'expo_push_token' });
+    if (error) throw error;
+  }
+
+  async function removeDeviceToken(token: string): Promise<void> {
+    const { error } = await supabase.from('device_tokens').delete().eq('expo_push_token', token);
+    if (error) throw error;
+  }
+
   async function createCoach(coach: Partial<Coach>): Promise<Coach> {
     const { data, error } = await supabase.from('coaches').insert(coach).select().single();
     if (error) throw error;
@@ -524,6 +542,9 @@ export function createDb(supabase: SupabaseClient) {
     getCoaches,
     createCoach,
     updateCoachAvailability,
+    updateCoachNotifPrefs,
+    registerDeviceToken,
+    removeDeviceToken,
     getPlans,
     createPlan,
     updatePlan,

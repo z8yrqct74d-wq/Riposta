@@ -24,10 +24,16 @@ export default function CoachProfile() {
   const { coach } = useCoach();
   const { signOut } = useAuth();
   const [stats, setStats] = useState({ lessons: 0, att: 0 });
-  const [notifs, setNotifs] = useState(true);
-  const [digest, setDigest] = useState(true);
+  const [notifs, setNotifs] = useState(coach?.notif_prefs?.sessionReminders ?? true);
 
   useEffect(() => { if (coach?.id) db.getCoachWeekStats(coach.id).then(setStats).catch(() => {}); }, [coach?.id]);
+  useEffect(() => { if (coach?.notif_prefs?.sessionReminders != null) setNotifs(coach.notif_prefs.sessionReminders); }, [coach?.notif_prefs]);
+
+  const toggleNotifs = () => setNotifs((v) => {
+    const next = !v;
+    if (coach?.id) db.updateCoachNotifPrefs(coach.id, { ...(coach.notif_prefs || {}), sessionReminders: next }).catch(() => {});
+    return next;
+  });
 
   const name = coach?.name || 'Coach';
   const email = coach?.email || '';
@@ -62,13 +68,9 @@ export default function CoachProfile() {
         <View>
           <Text variant="label" color={t.colors.faint} style={{ marginBottom: 10, marginLeft: 2 }}>Notifications</Text>
           <View style={{ backgroundColor: t.colors.surface, borderWidth: 1, borderColor: t.colors.hairline, borderRadius: t.radius.card, overflow: 'hidden' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: t.colors.hairline }}>
-              <Text style={{ flex: 1 }} size={14}>Session reminders</Text>
-              <Toggle on={notifs} onPress={() => setNotifs((v) => !v)} />
-            </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14 }}>
-              <Text style={{ flex: 1 }} size={14}>AI digest</Text>
-              <Toggle on={digest} onPress={() => setDigest((v) => !v)} />
+              <Text style={{ flex: 1 }} size={14}>Session reminders</Text>
+              <Toggle on={notifs} onPress={toggleNotifs} />
             </View>
           </View>
         </View>

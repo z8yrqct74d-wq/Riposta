@@ -36,6 +36,7 @@ export interface Member {
   federation_licence_url?: string | null;
   federation_licence_issue_date?: string | null;
   federation_licence_expiry_date?: string | null;
+  notif_prefs?: Record<string, boolean> | null;
 }
 
 export interface CoachAvailability {
@@ -53,6 +54,7 @@ export interface Coach {
   max_load?: number;
   email?: string | null;
   availability_json?: CoachAvailability | null;
+  notif_prefs?: Record<string, boolean> | null;
 }
 
 export interface Admin {
