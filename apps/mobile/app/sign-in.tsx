@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { View, Pressable, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Redirect } from 'expo-router';
 import PagerView from 'react-native-pager-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Line, Path, Circle, Ellipse } from 'react-native-svg';
@@ -71,7 +72,9 @@ export default function Onboarding() {
   const [role, setRole] = useState<Role>('athlete');
   const [signingIn, setSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
-  const { signInWithGoogle } = useAuth();
+  const { session, signInWithGoogle } = useAuth();
+
+  if (session) return <Redirect href="/" />;
 
   const isCoach = role === 'coach';
   const isDark = step === 0;
