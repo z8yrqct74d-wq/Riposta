@@ -195,10 +195,6 @@ export function AdminMembers({ onSelectMember }) {
             </button>
           ))}
         </div>
-        <CardLabel>Status</CardLabel>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {['Active','Trial','Inactive'].map(s => <span key={s} style={{ fontSize: 12, color: 'var(--muted)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-pill)', padding: '3px 9px' }}>{s}</span>)}
-        </div>
       </div>
       <div style={{ flex: 1, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>

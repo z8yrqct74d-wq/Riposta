@@ -9,12 +9,6 @@ import { db } from '../../src/lib/supabase';
 import { useCoach } from '../../src/coach/CoachData';
 import { WEAPON_LABEL } from '@riposte/core';
 
-const TIDIED = [
-  ['Focus', 'Distance control in the lunge.'],
-  ['Improved', 'Holding distance before committing; back foot stays loaded.'],
-  ['Homework', 'Shadow footwork, 10 min, ×3 this week.'],
-];
-
 export default function LessonView() {
   const t = useTheme();
   const { selected: item, coach } = useCoach();
@@ -25,9 +19,12 @@ export default function LessonView() {
   const [showMinus, setShowMinus] = useState(false);
   const [marking, setMarking] = useState(false);
   const [markError, setMarkError] = useState<string | null>(null);
-  const [note, setNote] = useState('');
-  const [tidying, setTidying] = useState(false);
-  const [tidied, setTidied] = useState(false);
+  const [focus, setFocus] = useState('');
+  const [improved, setImproved] = useState('');
+  const [homework, setHomework] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
 
   const sub = item ? `${item.t}${item.piste ? ` · Piste ${item.piste}` : ''} · ${item.durMin} min` : '';
 
@@ -53,11 +50,25 @@ export default function LessonView() {
     }
   };
 
-  const tidy = () => {
-    if (!note.trim()) return;
-    setTidying(true);
-    if (item?.memberId && coach?.id) db.saveNote({ member_id: item.memberId, coach_id: coach.id, raw_note: note }).catch(() => {});
-    setTimeout(() => { setTidying(false); setTidied(true); }, 900);
+  const saveNote = async () => {
+    if (!item?.memberId || !coach?.id) return;
+    if (!focus.trim() && !improved.trim() && !homework.trim()) return;
+    setSaving(true);
+    setNoteError(null);
+    try {
+      await db.saveNote({
+        member_id: item.memberId,
+        coach_id: coach.id,
+        tidied_focus: focus.trim() || null,
+        tidied_improved: improved.trim() || null,
+        tidied_homework: homework.trim() || null,
+      });
+      setSaved(true);
+    } catch {
+      setNoteError("Couldn't save the note — check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -92,24 +103,32 @@ export default function LessonView() {
         )}
 
         <Text variant="label" color={t.colors.faint} style={{ marginBottom: 8 }}>Lesson note</Text>
-        <TextInput value={note} onChangeText={setNote} placeholder="Quick free-text — what you worked on, how it went…" placeholderTextColor={t.colors.faint} multiline style={{ minHeight: 90, padding: 13, borderRadius: t.radius.card, borderWidth: 1, borderColor: t.colors.hairline, backgroundColor: t.colors.surface, color: t.colors.ink, fontSize: 14, textAlignVertical: 'top' }} />
-        <Button label={tidying ? 'Tidying…' : tidied ? 'Re-tidy' : 'Save & tidy with AI'} variant="secondary" onPress={tidy} disabled={!note.trim() || tidying} style={{ marginTop: 10 }} />
-
-        {tidied && !tidying && (
-          <View style={{ marginTop: 14, backgroundColor: t.colors.surface, borderWidth: 1, borderColor: t.colors.hairline, borderRadius: t.radius.card, padding: 14 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-              <Icon name="sparkle" size={14} color={t.colors.steel} />
-              <Text size={11} weight="600" color={t.colors.steel} style={{ textTransform: 'uppercase', letterSpacing: 0.4 }}>Tidied summary</Text>
-            </View>
-            {TIDIED.map(([k, v], i) => (
-              <View key={k} style={{ flexDirection: 'row', gap: 10, paddingVertical: 7, borderBottomWidth: i < 2 ? 1 : 0, borderBottomColor: t.colors.hairline }}>
-                <Text size={11.5} weight="600" color={t.colors.steel} style={{ width: 72, textTransform: 'uppercase' }}>{k}</Text>
-                <Text size={13.5} style={{ flex: 1, lineHeight: 20 }}>{v}</Text>
-              </View>
-            ))}
-            <Text size={11} color={t.colors.faint} style={{ marginTop: 10, fontStyle: 'italic' }}>Athlete sees this in their Progress tab.</Text>
+        {([
+          { label: 'Focus', value: focus, set: setFocus, placeholder: 'What you worked on this lesson…' },
+          { label: 'Improved', value: improved, set: setImproved, placeholder: 'What went well / progress made…' },
+          { label: 'Homework', value: homework, set: setHomework, placeholder: 'What to practise before next time…' },
+        ] as const).map((f) => (
+          <View key={f.label} style={{ marginBottom: 10 }}>
+            <Text size={11.5} weight="600" color={t.colors.steel} style={{ textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 5 }}>{f.label}</Text>
+            <TextInput
+              value={f.value}
+              onChangeText={(v) => { f.set(v); if (saved) setSaved(false); }}
+              placeholder={f.placeholder}
+              placeholderTextColor={t.colors.faint}
+              multiline
+              style={{ minHeight: 56, padding: 12, borderRadius: t.radius.card, borderWidth: 1, borderColor: t.colors.hairline, backgroundColor: t.colors.surface, color: t.colors.ink, fontSize: 14, textAlignVertical: 'top' }}
+            />
           </View>
-        )}
+        ))}
+        {noteError && <Text color={t.colors.danger} size={12.5} style={{ marginBottom: 8 }}>{noteError}</Text>}
+        <Button
+          label={saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save note'}
+          variant="secondary"
+          onPress={saveNote}
+          disabled={saving || saved || (!focus.trim() && !improved.trim() && !homework.trim())}
+          style={{ marginTop: 4 }}
+        />
+        <Text size={11} color={t.colors.faint} style={{ marginTop: 10, fontStyle: 'italic' }}>The athlete sees this in their Progress tab.</Text>
       </ScrollView>
     </View>
   );

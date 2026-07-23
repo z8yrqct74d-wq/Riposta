@@ -211,7 +211,18 @@ export function createDb(supabase: SupabaseClient) {
       .eq('member_id', memberId)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return (data ?? []) as LessonNote[];
+    const notes = (data ?? []) as LessonNote[];
+    // Attach real coach names. lesson_notes.coach_id has no FK to coaches, so
+    // we can't embed via PostgREST — do a targeted lookup and map instead.
+    const coachIds = [...new Set(notes.map((n) => n.coach_id).filter(Boolean))] as string[];
+    if (coachIds.length) {
+      const { data: coaches } = await supabase.from('coaches').select('id, name').in('id', coachIds);
+      const nameById = new Map((coaches ?? []).map((c) => [c.id as string, c.name as string]));
+      for (const n of notes) {
+        if (n.coach_id && nameById.has(n.coach_id)) n.coaches = { name: nameById.get(n.coach_id)! };
+      }
+    }
+    return notes;
   }
 
   // ── Coaches ────────────────────────────────────────────────

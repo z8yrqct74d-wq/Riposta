@@ -10,7 +10,6 @@ import { useAthlete } from '../../src/athlete/AthleteData';
 import { isoDate } from '@riposte/core';
 import type { Booking, LessonNote } from '@riposte/core';
 
-const COACH_MAP: Record<string, string> = { sandu: 'C. Sandu', dina: 'L. Dina' };
 type ViewMode = 'day' | 'week' | 'month';
 const BAR_MAX_H = 52;
 
@@ -149,7 +148,7 @@ export default function ProgressScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                       <Icon name="sparkle" size={13} color={t.colors.steel} />
                       <Text size={11} weight="600" color={t.colors.steel} style={{ textTransform: 'uppercase', letterSpacing: 0.4 }}>Focus</Text>
-                      <Text size={11.5} color={t.colors.faint} style={{ marginLeft: 'auto' }}>{COACH_MAP[n.coach_id ?? ''] || n.coach_id} · {dateStr}</Text>
+                      <Text size={11.5} color={t.colors.faint} style={{ marginLeft: 'auto' }}>{n.coaches?.name || 'Coach'} · {dateStr}</Text>
                     </View>
                     {n.tidied_focus ? (
                       <>

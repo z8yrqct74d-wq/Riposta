@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -8,6 +8,7 @@ import { useTheme } from '../../src/theme/theme';
 import { Text, Pill, ColorBarRow } from '../../src/components/ui';
 import { Icon } from '../../src/components/Icon';
 import { WeaponGlyph } from '../../src/components/WeaponGlyph';
+import { db } from '../../src/lib/supabase';
 import { useAuth } from '../../src/auth/AuthProvider';
 import { useAthlete } from '../../src/athlete/AthleteData';
 
@@ -69,6 +70,14 @@ export default function AthleteHome() {
   const router = useRouter();
   const { session, coachPending } = useAuth();
   const { member, credits, upcoming } = useAthlete();
+  const [planCredits, setPlanCredits] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!member?.plan_name) { setPlanCredits(null); return; }
+    db.getPlans()
+      .then((ps) => setPlanCredits(ps.find((p) => p.name === member.plan_name)?.credits ?? null))
+      .catch(() => {});
+  }, [member?.plan_name]);
 
   const firstName = ((session?.user?.user_metadata?.full_name as string | undefined) || member?.name || '').split(' ')[0] || 'there';
   const hour = new Date().getHours();
@@ -78,7 +87,9 @@ export default function AthleteHome() {
   const nextLesson = upcoming[0] ?? null;
   const showCert = member?.visa_status === 'expiring' || member?.visa_status === 'expired';
   const showPay = member?.pay_status === 'due' || member?.pay_status === 'overdue';
-  const creditTotal = Math.max(credits, 1);
+  // Meter total = the member's plan allotment when known, never less than the
+  // current balance (in case they've topped up beyond it).
+  const creditTotal = Math.max(planCredits ?? 0, credits, 1);
   const payTone = PAYMENT_STATUS[member?.pay_status ?? 'paid'].tone;
 
   return (

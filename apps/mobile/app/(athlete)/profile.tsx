@@ -16,7 +16,6 @@ import { supabase, db } from '../../src/lib/supabase';
 import { useAuth } from '../../src/auth/AuthProvider';
 import { useAthlete } from '../../src/athlete/AthleteData';
 
-const PLAN_OPTIONS = ['Trial', 'Lesson pack', 'Monthly', 'Competitor', 'Drop-in'];
 const WEAPON_OPTIONS: Weapon[] = ['foil', 'epee', 'sabre'];
 const CATEGORY_OPTIONS = ['U9', 'U11', 'U14', 'U17', 'U20', 'Senior', 'Veteran', 'Amateur'];
 const NOTIF_ITEMS: { key: string; label: string }[] = [
@@ -274,6 +273,11 @@ export default function ProfileScreen() {
   const [docSheet, setDocSheet] = useState<null | 'medical' | 'federation'>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const [emergencyOpen, setEmergencyOpen] = useState(false);
+  const [planOptions, setPlanOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    db.getPlans().then((ps) => setPlanOptions(ps.map((p) => p.name))).catch(() => {});
+  }, []);
 
   const displayName = (session?.user?.user_metadata?.full_name as string | undefined) || member?.name || 'Guest';
   const email = session?.user?.email || member?.email || '';
@@ -319,7 +323,7 @@ export default function ProfileScreen() {
         </Section>
 
         <Section title="Club membership">
-          <ProfileRow label="Plan" value={member?.plan_name || '—'} onTap={() => setPicker({ field: 'plan_name', title: 'Membership plan', options: PLAN_OPTIONS.map((v) => ({ value: v, label: v })) })} />
+          <ProfileRow label="Plan" value={member?.plan_name || '—'} onTap={() => setPicker({ field: 'plan_name', title: 'Membership plan', options: planOptions.map((v) => ({ value: v, label: v })) })} />
           <ProfileRow label="Weapon" value={member?.weapon ? WEAPON_LABEL[member.weapon] : '—'} onTap={() => setPicker({ field: 'weapon', title: 'Weapon', options: WEAPON_OPTIONS.map((v) => ({ value: v, label: WEAPON_LABEL[v], glyph: v })) })} />
           <ProfileRow label="Category" value={member?.category || '—'} onTap={() => setPicker({ field: 'category', title: 'Category', options: CATEGORY_OPTIONS.map((v) => ({ value: v, label: v })) })} />
           <ProfileRow label="Member since" value={memberSince} last />

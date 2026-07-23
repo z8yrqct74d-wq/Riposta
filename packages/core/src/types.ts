@@ -116,6 +116,9 @@ export interface LessonNote {
   tidied_improved?: string | null;
   tidied_homework?: string | null;
   created_at?: string;
+  // Enriched by getNotesForMember (coach_id has no FK, so this is a manual
+  // lookup rather than a PostgREST embed).
+  coaches?: { name: string } | null;
 }
 
 export interface EmergencyContact {

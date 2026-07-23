@@ -8,7 +8,8 @@ import { AdminDashboard, AdminMembers } from './AdminViews';
 import { MemberDetail } from './AdminMemberDetail';
 import { AdminCoaches } from './AdminCoaches';
 import { AdminPlans, AdminSettings } from './AdminPlansSettings';
-import { getCalendarBlocks, createCalendarBlock, updateCalendarBlock, deleteCalendarBlock, getCoaches } from '../../lib/db';
+import { getCalendarBlocks, createCalendarBlock, updateCalendarBlock, deleteCalendarBlock, getCoaches, getSettings, getMembers } from '../../lib/db';
+import { supabase } from '../../lib/core';
 
 const DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MON = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -43,12 +44,12 @@ function Logo({ size = 26, color = 'var(--brand)' }) {
   );
 }
 
-function Sidebar({ active, onNav }) {
+function Sidebar({ active, onNav, adminEmail, clubName }) {
   return (
     <div style={{ width: 216, flexShrink: 0, background: 'var(--surface)', borderRight: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', padding: '20px 14px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 8px 22px' }}>
         <Logo size={26} />
-        <span className="r-display" style={{ fontSize: 20, color: 'var(--ink)' }}>Riposte</span>
+        <span className="r-display" style={{ fontSize: 20, color: 'var(--ink)' }}>{clubName || 'Riposte'}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {NAV.map(n => {
@@ -68,37 +69,12 @@ function Sidebar({ active, onNav }) {
         })}
       </div>
       <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 8px', borderTop: '1px solid var(--hairline)' }}>
-        <Avatar name="Club Admin" size={30} />
+        <Avatar name={adminEmail || 'Admin'} size={30} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>Club Admin</div>
-          <div style={{ fontSize: 11, color: 'var(--faint)' }}>Salle d'Armes</div>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{adminEmail || 'Admin'}</div>
+          <div style={{ fontSize: 11, color: 'var(--faint)' }}>{clubName || 'Riposte'}</div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function AIDigest({ items, onDismiss }) {
-  return (
-    <div style={{ overflow: 'hidden', animation: 'r-digest 240ms var(--e-enter)' }}>
-      <div style={{ margin: '0 24px 0', background: 'var(--steel-tint)', border: '1px solid color-mix(in oklab, var(--steel) 25%, transparent)', borderRadius: 'var(--r-card)', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
-          <Icon name="sparkle" size={16} color="var(--steel)" />
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--steel)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Digest</span>
-        </div>
-        <div style={{ display: 'flex', gap: 20, flex: 1, flexWrap: 'wrap' }}>
-          {items.map((it, i) => (
-            <span key={i} style={{ fontSize: 13, color: 'var(--ink)', display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: it.tone === 'danger' ? 'var(--danger)' : it.tone === 'warning' ? 'var(--warning)' : 'var(--steel)' }} />
-              {it.text}
-            </span>
-          ))}
-        </div>
-        <button onClick={onDismiss} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: 'none', background: 'transparent', padding: 4, display: 'flex' }}>
-          <Icon name="x" size={16} color="var(--muted)" />
-        </button>
-      </div>
-      <style>{`@keyframes r-digest { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </div>
   );
 }
@@ -241,13 +217,19 @@ function AdminApp() {
   const [draft, setDraft] = React.useState(null);
   const [panelConflict, setPanelConflict] = React.useState(null);
   const [toast, setToast] = React.useState(null);
-  const [digest, setDigest] = React.useState(true);
   const [selMember, setSelMember] = React.useState(null);
+  const [settings, setSettings] = React.useState(null);
+  const [adminEmail, setAdminEmail] = React.useState(null);
+  const [memberCount, setMemberCount] = React.useState(null);
 
   const coachMap = React.useMemo(() => Object.fromEntries(coaches.map(c => [c.id, c])), [coaches]);
+  const clubName = settings?.club_name || null;
 
   React.useEffect(() => {
     getCoaches().then(setCoaches).catch(() => {});
+    getSettings().then(setSettings).catch(() => {});
+    getMembers().then(ms => setMemberCount(ms.length)).catch(() => {});
+    supabase.auth.getUser().then(({ data }) => setAdminEmail(data?.user?.email ?? null)).catch(() => {});
   }, []);
 
   // Load the selected day's blocks from Supabase whenever the date changes.
@@ -292,20 +274,19 @@ function AdminApp() {
     fireToast('Block removed', 'default');
   };
 
+  const memberSub = memberCount == null ? '' : `${memberCount} athlete${memberCount === 1 ? '' : 's'}`;
   const titles = {
     dashboard: ['Dashboard', fmtLongDate(isoDate())],
-    members:   ['Members', '7 athletes'],
-    calendar:  ['Resource calendar', `${fmtLongDate(selectedDate)} · Riposte Main Room`],
+    members:   ['Members', memberSub],
+    calendar:  ['Resource calendar', fmtLongDate(selectedDate)],
     coaches:   ['Coaches', `${coaches.length} active`],
     plans:     ['Plans & billing', ''],
     settings:  ['Settings', ''],
   };
 
-  const showDigest = digest && (nav === 'dashboard' || nav === 'calendar') && !selMember;
-
   return (
     <div style={{ display: 'flex', height: '100%', background: 'var(--paper)', fontFamily: 'var(--font-ui)', position: 'relative', overflow: 'hidden' }}>
-      <Sidebar active={nav} onNav={(id) => { setNav(id); setSelMember(null); }} />
+      <Sidebar active={nav} onNav={(id) => { setNav(id); setSelMember(null); }} adminEmail={adminEmail} clubName={clubName} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
         {selMember ? (
           <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
@@ -317,13 +298,6 @@ function AdminApp() {
               onPrevDay={() => setSelectedDate(d => shiftDate(d, -1))}
               onNextDay={() => setSelectedDate(d => shiftDate(d, 1))}
               onToday={() => setSelectedDate(isoDate())} />
-            {showDigest && (
-              <AIDigest onDismiss={() => setDigest(false)} items={[
-                { text: '3 lessons unfilled tomorrow at 18:00', tone: 'warning' },
-                { text: '2 visas expire this week', tone: 'danger' },
-                { text: 'Riposte Main Room fully booked 18–20:00', tone: 'steel' },
-              ]} />
-            )}
             <div key={nav} style={{ flex: 1, overflow: 'auto', animation: 'r-fade var(--d-base) var(--e-standard)', minHeight: 0 }}>
               {nav === 'dashboard' && <AdminDashboard onGotoCalendar={() => setNav('calendar')} onGotoMembers={() => setNav('members')} />}
               {nav === 'members'   && <AdminMembers onSelectMember={setSelMember} />}

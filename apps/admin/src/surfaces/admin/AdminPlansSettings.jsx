@@ -206,28 +206,32 @@ function SettingsSection({ title, children }) {
   );
 }
 
-function ToggleRow({ label, sub, value, onChange, last }) {
+// Inline-editable settings row: commits on blur / Enter. `type` is 'text' or
+// 'number'; `suffix` is a trailing unit label (e.g. "h", "days").
+function EditableRow({ label, sub, value, onCommit, type = 'text', suffix, placeholder, last }) {
+  const [draft, setDraft] = React.useState(value ?? '');
+  React.useEffect(() => { setDraft(value ?? ''); }, [value]);
+  const commit = () => {
+    const next = type === 'number' ? (draft === '' ? null : Number(draft)) : draft.trim();
+    if (next !== value) onCommit(next);
+  };
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 16px', borderBottom: last ? 'none' : '1px solid var(--hairline)' }}>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)' }}>{label}</div>
         {sub && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{sub}</div>}
       </div>
-      <button onClick={() => onChange(!value)} className="r-focusable" style={{ width: 44, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer', background: value ? 'var(--brand)' : 'var(--hairline)', position: 'relative', transition: 'background var(--d-base) var(--e-spring)', flexShrink: 0 }}>
-        <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: value ? 21 : 3, transition: 'left 220ms var(--e-spring)', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-      </button>
-    </div>
-  );
-}
-
-function ValueRow({ label, sub, value, danger, last }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 16px', borderBottom: last ? 'none' : '1px solid var(--hairline)' }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 14, fontWeight: 500, color: danger ? 'var(--danger)' : 'var(--ink)' }}>{label}</div>
-        {sub && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{sub}</div>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input
+          type={type} value={draft} placeholder={placeholder}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          className="r-focusable"
+          style={{ width: type === 'number' ? 70 : 190, padding: '7px 10px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'var(--paper)', font: 'inherit', fontSize: 13.5, color: 'var(--ink)', textAlign: type === 'number' ? 'right' : 'left', boxSizing: 'border-box' }}
+        />
+        {suffix && <span style={{ fontSize: 13, color: 'var(--faint)' }}>{suffix}</span>}
       </div>
-      {value != null ? <span style={{ fontSize: 13.5, color: 'var(--muted)' }}>{value}</span> : <Icon name="chevR" size={16} color="var(--faint)" />}
     </div>
   );
 }
@@ -247,22 +251,13 @@ export function AdminSettings() {
   return (
     <div style={{ maxWidth: 640, padding: '20px 24px', overflowY: 'auto', height: '100%' }}>
       <SettingsSection title="Club profile">
-        <ValueRow label="Club name" value={v.club_name ?? '—'} />
-        <ValueRow label="City" value={v.city ?? '—'} />
-        <ValueRow label="Contact email" value={v.contact_email ?? '—'} last />
+        <EditableRow label="Club name" value={v.club_name ?? ''} placeholder="e.g. Riposte Salle d'Armes" onCommit={val => persist({ club_name: val })} />
+        <EditableRow label="City" value={v.city ?? ''} placeholder="e.g. Bucharest, Romania" onCommit={val => persist({ city: val })} />
+        <EditableRow label="Contact email" type="text" value={v.contact_email ?? ''} placeholder="admin@club.ro" onCommit={val => persist({ contact_email: val })} last />
       </SettingsSection>
       <SettingsSection title="Session rules">
-        <ValueRow label="Cancellation window" sub="Free cancellation up to this many hours before" value={`${v.cancellation_window_hours ?? 12} h`} />
-        <ValueRow label="Dunning offset" sub="Days after due before first reminder" value={`${v.dunning_offset_days ?? 3} days`} last />
-      </SettingsSection>
-      <SettingsSection title="AI preferences">
-        <ToggleRow label="Daily digest" sub="Show AI digest strip on dashboard and calendar" value={v.digest_enabled ?? true} onChange={val => persist({ digest_enabled: val })} />
-        <ToggleRow label="Lesson note tidying" sub="Auto-summarise coach notes into focus / improved / homework" value={v.note_tidying_enabled ?? true} onChange={val => persist({ note_tidying_enabled: val })} />
-        <ValueRow label="Digest tone" sub="How the digest phrases suggestions" value={v.digest_tone ?? 'Direct'} last />
-      </SettingsSection>
-      <SettingsSection title="Danger zone">
-        <ValueRow label="Export all data" sub="Download a full JSON export of club data" danger />
-        <ValueRow label="Delete club" sub="Permanently removes all data. Cannot be undone." danger last />
+        <EditableRow label="Cancellation window" sub="Free cancellation up to this many hours before" type="number" suffix="h" value={v.cancellation_window_hours ?? 12} onCommit={val => persist({ cancellation_window_hours: val })} />
+        <EditableRow label="Dunning offset" sub="Days after due before first reminder" type="number" suffix="days" value={v.dunning_offset_days ?? 3} onCommit={val => persist({ dunning_offset_days: val })} last />
       </SettingsSection>
     </div>
   );
