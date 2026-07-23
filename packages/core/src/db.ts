@@ -72,6 +72,14 @@ export function createDb(supabase: SupabaseClient) {
     if (error) throw error;
   }
 
+  /** Records a real check-in for the member and bumps their last_seen. */
+  async function recordCheckIn(memberId: string): Promise<void> {
+    const { error } = await supabase.from('check_ins').insert({ member_id: memberId, date: isoDate() });
+    if (error) throw error;
+    // Best-effort last_seen update; don't fail the check-in if it errors.
+    await supabase.from('members').update({ last_seen: isoDate() }).eq('id', memberId);
+  }
+
   // ── Calendar blocks ────────────────────────────────────────
   /**
    * Blocks for a date or inclusive date range. `to` defaults to `from` (a
@@ -502,6 +510,7 @@ export function createDb(supabase: SupabaseClient) {
     getMember,
     updateMemberCredits,
     updateMember,
+    recordCheckIn,
     getCalendarBlocks,
     createCalendarBlock,
     updateCalendarBlock,
