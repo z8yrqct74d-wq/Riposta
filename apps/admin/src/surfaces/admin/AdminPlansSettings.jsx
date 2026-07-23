@@ -1,10 +1,10 @@
 import React from 'react';
 import { Icon, Avatar, PaymentPill } from '../../components/Shared';
-import { getPlans, createPlan, updatePlan, deletePlan, getMembers, getPayments, getSettings, updateSettings } from '../../lib/db';
+import { getPlans, createPlan, updatePlan, deletePlan, getMembers, getPayments, getSettings, updateSettings, getPistes, createPiste, updatePiste, deletePiste } from '../../lib/db';
 
-function slugify(name) {
+function slugify(name, prefix = 'plan') {
   return (name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `plan-${Date.now()}`;
+    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `${prefix}-${Date.now()}`;
 }
 
 function PlanCard({ plan, onEdit }) {
@@ -236,6 +236,76 @@ function EditableRow({ label, sub, value, onCommit, type = 'text', suffix, place
   );
 }
 
+// Operating-hours row backed by a real <input type="time"> that maps to and
+// from minutes-since-midnight (how blocks store times).
+function TimeRow({ label, sub, minutes, onCommit, last }) {
+  const hhmm = (m) => `${String(Math.floor((m ?? 0) / 60)).padStart(2, '0')}:${String((m ?? 0) % 60).padStart(2, '0')}`;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 16px', borderBottom: last ? 'none' : '1px solid var(--hairline)' }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)' }}>{label}</div>
+        {sub && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{sub}</div>}
+      </div>
+      <input
+        type="time" value={hhmm(minutes)}
+        onChange={e => { const [h, mm] = e.target.value.split(':').map(Number); if (!Number.isNaN(h)) onCommit(h * 60 + (mm || 0)); }}
+        className="r-focusable"
+        style={{ padding: '7px 10px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'var(--paper)', font: 'inherit', fontSize: 13.5, color: 'var(--ink)', boxSizing: 'border-box' }}
+      />
+    </div>
+  );
+}
+
+function PistesSection() {
+  const [pistes, setPistes] = React.useState([]);
+  const [adding, setAdding] = React.useState(false);
+  const [newName, setNewName] = React.useState('');
+  const [newElectric, setNewElectric] = React.useState(false);
+
+  const load = React.useCallback(() => { getPistes().then(setPistes).catch(() => {}); }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const rename = (id, name) => { setPistes(ps => ps.map(p => p.id === id ? { ...p, name } : p)); updatePiste(id, { name }).catch(() => {}); };
+  const toggleElectric = (id, electric) => { setPistes(ps => ps.map(p => p.id === id ? { ...p, electric } : p)); updatePiste(id, { electric }).catch(() => {}); };
+  const remove = (id) => { setPistes(ps => ps.filter(p => p.id !== id)); deletePiste(id).catch(() => {}); };
+  const addPiste = async () => {
+    if (!newName.trim()) return;
+    const id = slugify(newName, 'piste');
+    await createPiste({ id, name: newName.trim(), electric: newElectric, sort: pistes.length, active: true });
+    setNewName(''); setNewElectric(false); setAdding(false); load();
+  };
+
+  const field = { padding: '7px 10px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'var(--paper)', font: 'inherit', fontSize: 13.5, color: 'var(--ink)', boxSizing: 'border-box' };
+
+  return (
+    <SettingsSection title="Pistes / rooms">
+      {pistes.map((p, i) => (
+        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: (i < pistes.length - 1 || adding) ? '1px solid var(--hairline)' : 'none' }}>
+          <input defaultValue={p.name} onBlur={e => { const val = e.target.value.trim(); if (val && val !== p.name) rename(p.id, val); }} className="r-focusable" style={{ ...field, flex: 1 }} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--muted)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!p.electric} onChange={e => toggleElectric(p.id, e.target.checked)} /> Electric
+          </label>
+          <button onClick={() => remove(p.id)} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--danger)', fontSize: 12.5, fontWeight: 600 }}>Remove</button>
+        </div>
+      ))}
+      {adding ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px' }}>
+          <input autoFocus value={newName} onChange={e => setNewName(e.target.value)} placeholder="Room name" className="r-focusable" style={{ ...field, flex: 1 }} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--muted)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={newElectric} onChange={e => setNewElectric(e.target.checked)} /> Electric
+          </label>
+          <button onClick={addPiste} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: 'none', background: 'var(--brand)', color: '#fff', borderRadius: 'var(--r-btn)', padding: '7px 12px', fontSize: 12.5, fontWeight: 600 }}>Add</button>
+          <button onClick={() => { setAdding(false); setNewName(''); }} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--muted)', fontSize: 12.5 }}>Cancel</button>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} className="r-focusable" style={{ width: '100%', font: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, border: 'none', background: 'transparent', padding: '12px', fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>
+          <Icon name="plus" size={15} color="var(--muted)" /> Add piste
+        </button>
+      )}
+    </SettingsSection>
+  );
+}
+
 export function AdminSettings() {
   const [s, setS] = React.useState(null);
 
@@ -255,7 +325,14 @@ export function AdminSettings() {
         <EditableRow label="City" value={v.city ?? ''} placeholder="e.g. Bucharest, Romania" onCommit={val => persist({ city: val })} />
         <EditableRow label="Contact email" type="text" value={v.contact_email ?? ''} placeholder="admin@club.ro" onCommit={val => persist({ contact_email: val })} last />
       </SettingsSection>
+      <PistesSection />
+      <SettingsSection title="Operating hours">
+        <TimeRow label="Open" minutes={v.cal_start_min ?? 960} onCommit={val => persist({ cal_start_min: val })} />
+        <TimeRow label="Close" minutes={v.cal_end_min ?? 1320} onCommit={val => persist({ cal_end_min: val })} last />
+      </SettingsSection>
       <SettingsSection title="Session rules">
+        <EditableRow label="Lesson length" sub="Default individual-lesson duration" type="number" suffix="min" value={v.lesson_duration_min ?? 45} onCommit={val => persist({ lesson_duration_min: val })} />
+        <EditableRow label="Credit cost per lesson" type="number" suffix="credits" value={v.credit_cost_per_lesson ?? 1} onCommit={val => persist({ credit_cost_per_lesson: val })} />
         <EditableRow label="Cancellation window" sub="Free cancellation up to this many hours before" type="number" suffix="h" value={v.cancellation_window_hours ?? 12} onCommit={val => persist({ cancellation_window_hours: val })} />
         <EditableRow label="Dunning offset" sub="Days after due before first reminder" type="number" suffix="days" value={v.dunning_offset_days ?? 3} onCommit={val => persist({ dunning_offset_days: val })} last />
       </SettingsSection>

@@ -8,7 +8,7 @@ import { AdminDashboard, AdminMembers } from './AdminViews';
 import { MemberDetail } from './AdminMemberDetail';
 import { AdminCoaches } from './AdminCoaches';
 import { AdminPlans, AdminSettings } from './AdminPlansSettings';
-import { getCalendarBlocks, createCalendarBlock, updateCalendarBlock, deleteCalendarBlock, getCoaches, getSettings, getMembers } from '../../lib/db';
+import { getCalendarBlocks, createCalendarBlock, updateCalendarBlock, deleteCalendarBlock, getCoaches, getSettings, getMembers, getPistes } from '../../lib/db';
 import { supabase } from '../../lib/core';
 
 const DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -125,9 +125,11 @@ function Field({ label, children }) {
 
 const selStyle = () => ({ width: '100%', padding: '9px 11px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'var(--paper)', font: 'inherit', fontSize: 13.5, color: 'var(--ink)', boxSizing: 'border-box' });
 
-function SidePanel({ draft, onChange, onSave, onDelete, onClose, conflict, coaches }) {
+function SidePanel({ draft, onChange, onSave, onDelete, onClose, conflict, coaches, pistes, calStart, calEnd }) {
   if (!draft) return null;
-  const times = []; for (let t = CAL_START; t <= CAL_END - 15; t += 15) times.push(t);
+  const cs = calStart ?? CAL_START, ce = calEnd ?? CAL_END;
+  const rooms = (pistes && pistes.length ? pistes : PISTES).map(p => ({ id: p.id, label: p.name ?? p.label, electric: p.electric }));
+  const times = []; for (let t = cs; t <= ce - 15; t += 15) times.push(t);
   const durs = [30,45,60,75,90,105,120];
   const isNew = !draft.id;
   const fmtTime = (min) => { const h = Math.floor(min / 60), m = min % 60; return `${h}:${String(m).padStart(2, '0')}`; };
@@ -151,7 +153,7 @@ function SidePanel({ draft, onChange, onSave, onDelete, onClose, conflict, coach
           <Field label="Date"><input type="date" value={draft.date} onChange={e => onChange({ date: e.target.value })} className="r-focusable" style={selStyle()} /></Field>
           <Field label="Piste">
             <select value={draft.piste} onChange={e => onChange({ piste: e.target.value })} className="r-focusable" style={selStyle()}>
-              {PISTES.map(p => <option key={p.id} value={p.id}>{p.label}{p.electric ? ' · electric' : ''}</option>)}
+              {rooms.map(p => <option key={p.id} value={p.id}>{p.label}{p.electric ? ' · electric' : ''}</option>)}
             </select>
           </Field>
           <div style={{ display: 'flex', gap: 12 }}>
@@ -221,14 +223,19 @@ function AdminApp() {
   const [settings, setSettings] = React.useState(null);
   const [adminEmail, setAdminEmail] = React.useState(null);
   const [memberCount, setMemberCount] = React.useState(null);
+  const [pistes, setPistes] = React.useState([]);
 
   const coachMap = React.useMemo(() => Object.fromEntries(coaches.map(c => [c.id, c])), [coaches]);
   const clubName = settings?.club_name || null;
+  const calStart = settings?.cal_start_min ?? CAL_START;
+  const calEnd = settings?.cal_end_min ?? CAL_END;
+  const activePistes = React.useMemo(() => pistes.filter(p => p.active !== false), [pistes]);
 
   React.useEffect(() => {
     getCoaches().then(setCoaches).catch(() => {});
     getSettings().then(setSettings).catch(() => {});
     getMembers().then(ms => setMemberCount(ms.length)).catch(() => {});
+    getPistes().then(setPistes).catch(() => {});
     supabase.auth.getUser().then(({ data }) => setAdminEmail(data?.user?.email ?? null)).catch(() => {});
   }, []);
 
@@ -243,7 +250,7 @@ function AdminApp() {
 
   const fireToast = (msg, tone) => { setToast({ msg, tone }); setTimeout(() => setToast(null), 2600); };
 
-  const openCreate = (partial) => { setPanelConflict(null); setDraft({ kind: 'lesson', title: '', piste: 'p1', date: selectedDate, start: 18*60, dur: 45, coach: coaches[0]?.id ?? null, weapon: 'sabre', ...partial }); };
+  const openCreate = (partial) => { setPanelConflict(null); setDraft({ kind: 'lesson', title: '', piste: activePistes[0]?.id ?? 'p1', date: selectedDate, start: 18*60, dur: settings?.lesson_duration_min ?? 45, coach: coaches[0]?.id ?? null, weapon: 'sabre', ...partial }); };
   const openEdit = (b) => { setPanelConflict(null); setDraft({ ...b }); };
   const changeDraft = (patch) => setDraft(d => ({ ...d, ...patch }));
 
@@ -303,7 +310,7 @@ function AdminApp() {
               {nav === 'members'   && <AdminMembers onSelectMember={setSelMember} />}
               {nav === 'calendar'  && (
                 <div style={{ padding: 24 }}>
-                  <ResourceCalendar blocks={blocks} setBlocks={setBlocks} onSelect={openEdit} onCreate={openCreate} toast={fireToast} coachMap={coachMap} />
+                  <ResourceCalendar blocks={blocks} setBlocks={setBlocks} onSelect={openEdit} onCreate={openCreate} toast={fireToast} coachMap={coachMap} pistes={activePistes} calStart={calStart} calEnd={calEnd} />
                   <div style={{ display: 'flex', gap: 18, marginTop: 14, fontSize: 12, color: 'var(--muted)', alignItems: 'center' }}>
                     {Object.entries(KIND).map(([k, v]) => (
                       <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: v.bg, border: '1px solid '+v.fg, borderLeft: '3px solid '+v.bar }} /> {v.label}</span>
@@ -316,7 +323,7 @@ function AdminApp() {
               {nav === 'plans'    && <AdminPlans />}
               {nav === 'settings' && <AdminSettings />}
             </div>
-            {nav === 'calendar' && <SidePanel draft={draft} onChange={changeDraft} onSave={saveDraft} onDelete={deleteDraft} onClose={() => setDraft(null)} conflict={panelConflict} coaches={coaches} />}
+            {nav === 'calendar' && <SidePanel draft={draft} onChange={changeDraft} onSave={saveDraft} onDelete={deleteDraft} onClose={() => setDraft(null)} conflict={panelConflict} coaches={coaches} pistes={activePistes} calStart={calStart} calEnd={calEnd} />}
           </>
         )}
         <Toast toast={toast} />

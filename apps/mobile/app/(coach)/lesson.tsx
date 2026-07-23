@@ -25,6 +25,11 @@ export default function LessonView() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
+  const [creditCost, setCreditCost] = useState(1);
+
+  React.useEffect(() => {
+    db.getSettings().then((s) => { if (s?.credit_cost_per_lesson != null) setCreditCost(s.credit_cost_per_lesson); }).catch(() => {});
+  }, []);
 
   const sub = item ? `${item.t}${item.piste ? ` · Piste ${item.piste}` : ''} · ${item.durMin} min` : '';
 
@@ -37,7 +42,7 @@ export default function LessonView() {
       // memberCredits snapshot captured whenever MyDay last loaded — that
       // snapshot can be stale (a top-up or another lesson since then).
       const fresh = await db.getMember(item.memberId);
-      const nextCredits = Math.max(0, (fresh?.credits ?? item.memberCredits ?? 1) - 1);
+      const nextCredits = Math.max(0, (fresh?.credits ?? item.memberCredits ?? creditCost) - creditCost);
       await db.updateMemberCredits(item.memberId, nextCredits);
       if (item.bookingId) await db.updateBookingAttendance(item.bookingId, 'present');
       setDone(true);
@@ -93,12 +98,12 @@ export default function LessonView() {
         {!done ? (
           <>
             {markError && <Text color={t.colors.danger} size={12.5} style={{ marginBottom: 8 }}>{markError}</Text>}
-            <Button label={marking ? 'Saving…' : 'Mark done · use 1 credit'} onPress={markDone} disabled={marking} style={{ marginBottom: 16 }} />
+            <Button label={marking ? 'Saving…' : `Mark done · use ${creditCost} credit${creditCost === 1 ? '' : 's'}`} onPress={markDone} disabled={marking} style={{ marginBottom: 16 }} />
           </>
         ) : (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: t.radius.btn, backgroundColor: t.colors.successTint, marginBottom: 16 }}>
             <Icon name="check" size={16} color={t.colors.success} strokeWidth={2.2} />
-            <Text color={t.colors.success} size={13.5} weight="600">Lesson completed · 1 credit deducted</Text>
+            <Text color={t.colors.success} size={13.5} weight="600">Lesson completed · {creditCost} credit{creditCost === 1 ? '' : 's'} deducted</Text>
           </View>
         )}
 

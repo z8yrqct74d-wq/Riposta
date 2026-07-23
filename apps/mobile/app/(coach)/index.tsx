@@ -30,19 +30,19 @@ function scopedToCoach(b: CalendarBlock, coachId: string | null) {
   return b.coach === coachId || b.coach === null;
 }
 
-function buildDayItems(blocks: CalendarBlock[], bookings: Booking[], todayStr: string, coachId: string | null): CoachItem[] {
+function buildDayItems(blocks: CalendarBlock[], bookings: Booking[], todayStr: string, coachId: string | null, lessonMin: number, resolvePiste: (id: string | null) => string): CoachItem[] {
   const blockItems: CoachItem[] = blocks.filter((b) => b.date === todayStr && scopedToCoach(b, coachId)).map((b) => (
-    { id: b.id, blockId: b.id, t: minToTime(b.start), startMin: b.start, durMin: b.dur, type: b.kind || 'group', title: b.title, who: b.piste || 'Main Room', weapon: b.weapon, piste: b.piste }
+    { id: b.id, blockId: b.id, t: minToTime(b.start), startMin: b.start, durMin: b.dur, type: b.kind || 'group', title: b.title, who: resolvePiste(b.piste), weapon: b.weapon, piste: resolvePiste(b.piste) }
   ));
   const lessonItems: CoachItem[] = (bookings || []).filter((bk) => bk.slot_date === todayStr).map((bk) => {
     const [h, m] = (bk.slot_time || '0:0').split(':').map(Number);
     const startMin = h * 60 + m;
     const mb = bk.members;
     return {
-      id: bk.id, bookingId: bk.id, memberId: bk.member_id, t: (bk.slot_time || '').slice(0, 5), startMin, durMin: 45, type: 'lesson',
+      id: bk.id, bookingId: bk.id, memberId: bk.member_id, t: (bk.slot_time || '').slice(0, 5), startMin, durMin: lessonMin, type: 'lesson',
       title: mb?.name || 'Athlete',
       who: [mb?.weapon && mb.weapon[0].toUpperCase() + mb.weapon.slice(1), mb?.category].filter(Boolean).join(' · '),
-      weapon: (mb?.weapon as Weapon) || 'foil', piste: bk.piste || 'Main Room',
+      weapon: (mb?.weapon as Weapon) || 'foil', piste: resolvePiste(bk.piste ?? null),
       memberCredits: mb?.credits, memberCat: mb?.category, memberName: mb?.name,
     };
   });
@@ -57,7 +57,7 @@ function buildDayItems(blocks: CalendarBlock[], bookings: Booking[], todayStr: s
 }
 
 interface WeekDay { dow: string; dom: number; today: boolean; items: { id: string; type: 'lesson' | 'group' | 'open'; title: string | null; t: string; weapon?: Weapon | null; status: string | null }[]; }
-function buildWeekGrid(blocks: CalendarBlock[], bookings: Booking[], weekStart: string, todayStr: string, coachId: string | null): WeekDay[] {
+function buildWeekGrid(blocks: CalendarBlock[], bookings: Booking[], weekStart: string, todayStr: string, coachId: string | null, lessonMin: number): WeekDay[] {
   const LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   return LABELS.map((dow, di) => {
     const dateStr = addDays(weekStart, di);
@@ -67,7 +67,7 @@ function buildWeekGrid(blocks: CalendarBlock[], bookings: Booking[], weekStart: 
     ));
     const lessonItems = bookings.filter((bk) => bk.slot_date === dateStr).map((bk) => {
       const [h, m] = (bk.slot_time || '0:0').split(':').map(Number);
-      return { id: bk.id, type: 'lesson' as const, title: bk.members?.name || 'Athlete', t: (bk.slot_time || '').slice(0, 5), weapon: (bk.members?.weapon as Weapon) || null, status: isToday ? slotStatus(h * 60 + m, 45) : null };
+      return { id: bk.id, type: 'lesson' as const, title: bk.members?.name || 'Athlete', t: (bk.slot_time || '').slice(0, 5), weapon: (bk.members?.weapon as Weapon) || null, status: isToday ? slotStatus(h * 60 + m, lessonMin) : null };
     });
     const items = [...blockItems, ...lessonItems].sort((a, b) => a.t.localeCompare(b.t));
     return { dow, dom: Number(dateStr.split('-')[2]), items, today: isToday };
@@ -121,6 +121,8 @@ export default function MyDay() {
   const [weekData, setWeekData] = useState<WeekDay[]>([]);
   const [monthData, setMonthData] = useState<Record<number, { type: 'lesson' | 'group' | 'open'; title: string | null }[]>>({});
   const [selDay, setSelDay] = useState(new Date().getDate());
+  const [lessonMin, setLessonMin] = useState(45);
+  const [pisteNames, setPisteNames] = useState<Record<string, string>>({});
 
   const today = new Date();
   const todayStr = isoDate(today);
@@ -136,15 +138,24 @@ export default function MyDay() {
 
   const CKIND: Record<string, string> = { lesson: t.colors.brand, group: t.colors.steel, open: t.colors.hairline };
 
+  // Resolve a piste id/value to a display name: blocks store the piste id
+  // (e.g. 'p1'), bookings store the name; fall back to the raw value.
+  const resolvePiste = React.useCallback((id: string | null) => (id ? (pisteNames[id] || id) : 'Main Room'), [pisteNames]);
+
+  useEffect(() => {
+    db.getPistes().then((ps) => setPisteNames(Object.fromEntries(ps.map((p) => [p.id, p.name])))).catch(() => {});
+    db.getSettings().then((s) => { if (s?.lesson_duration_min) setLessonMin(s.lesson_duration_min); }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     Promise.all([db.getCalendarBlocks(rangeFrom, rangeTo), coachId ? db.getBookingsForCoachInRange(coachId, rangeFrom, rangeTo) : Promise.resolve([])])
       .then(([blocks, bookings]) => {
-        setDayItems(buildDayItems(blocks, bookings, todayStr, coachId));
-        setWeekData(buildWeekGrid(blocks, bookings, weekStart, todayStr, coachId));
+        setDayItems(buildDayItems(blocks, bookings, todayStr, coachId, lessonMin, resolvePiste));
+        setWeekData(buildWeekGrid(blocks, bookings, weekStart, todayStr, coachId, lessonMin));
         setMonthData(buildMonthGrid(blocks, bookings, monthStart, monthEnd, coachId));
       })
       .catch(() => {});
-  }, [coachId, rangeFrom, rangeTo]);
+  }, [coachId, rangeFrom, rangeTo, lessonMin, resolvePiste]);
 
   const open = (it: CoachItem) => { setSelected(it); router.push(it.type === 'lesson' ? '/lesson' : '/session'); };
 

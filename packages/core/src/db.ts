@@ -12,6 +12,7 @@ import type {
   DocumentPatch,
   UploadInput,
   Plan,
+  Piste,
   Settings,
   Payment,
 } from './types';
@@ -266,6 +267,29 @@ export function createDb(supabase: SupabaseClient) {
     if (error) throw error;
   }
 
+  // ── Pistes / rooms ─────────────────────────────────────────
+  async function getPistes(): Promise<Piste[]> {
+    const { data, error } = await supabase.from('pistes').select('*').order('sort');
+    if (error) throw error;
+    return (data ?? []) as Piste[];
+  }
+
+  async function createPiste(piste: Partial<Piste>): Promise<Piste> {
+    const { data, error } = await supabase.from('pistes').insert(piste).select().single();
+    if (error) throw error;
+    return data as Piste;
+  }
+
+  async function updatePiste(id: string, patch: Partial<Piste>): Promise<void> {
+    const { error } = await supabase.from('pistes').update(patch).eq('id', id);
+    if (error) throw error;
+  }
+
+  async function deletePiste(id: string): Promise<void> {
+    const { error } = await supabase.from('pistes').delete().eq('id', id);
+    if (error) throw error;
+  }
+
   // ── Club settings (single row, id = 1) ─────────────────────
   async function getSettings(): Promise<Settings | null> {
     const { data, error } = await supabase.from('settings').select('*').eq('id', 1).maybeSingle();
@@ -495,6 +519,10 @@ export function createDb(supabase: SupabaseClient) {
     createPlan,
     updatePlan,
     deletePlan,
+    getPistes,
+    createPiste,
+    updatePiste,
+    deletePiste,
     getSettings,
     updateSettings,
     getPaymentsForMember,

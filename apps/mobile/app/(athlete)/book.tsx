@@ -17,8 +17,6 @@ import type { Coach, Weapon, Booking } from '@riposte/core';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-const PISTE_NAME = 'Riposte Main Room';
-
 interface Day { id: string; dow: string; dom: string; label?: string; date: string; avDay: (typeof AVAIL_DAYS)[number] | null; }
 interface UICoach { id: string; name: string; short: string; weapons: Weapon[]; maitre: boolean; blurb: string; availability: Coach['availability_json']; }
 
@@ -50,10 +48,10 @@ function mapDbCoach(c: Coach): UICoach {
 
 /** Open slots for one coach on one day: their weekly availability grid, minus a
  * day-of-week blackout, minus times another athlete already booked. */
-function slotsForCoachDay(coach: UICoach, day: Day, bookedTimes: Set<string>): { t: string; piste: string }[] {
+function slotsForCoachDay(coach: UICoach, day: Day, bookedTimes: Set<string>, pisteName: string): { t: string; piste: string }[] {
   const av = coach.availability;
   if (!day.avDay || !av?.slots || av.blackout?.[day.avDay]) return [];
-  return AVAIL_SLOTS.filter((s) => av.slots[`${day.avDay}|${s}`] && !bookedTimes.has(s)).map((t) => ({ t, piste: PISTE_NAME }));
+  return AVAIL_SLOTS.filter((s) => av.slots[`${day.avDay}|${s}`] && !bookedTimes.has(s)).map((t) => ({ t, piste: pisteName }));
 }
 
 const DAYS = buildDays();
@@ -126,13 +124,26 @@ export default function BookFlow() {
   const [booked, setBooked] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [bookError, setBookError] = useState<string | null>(null);
+  const [pisteName, setPisteName] = useState('');
+  const [lessonMin, setLessonMin] = useState(45);
+  const [creditCost, setCreditCost] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const rows = await db.getCoaches();
+        const [rows, pistes, settings] = await Promise.all([
+          db.getCoaches(),
+          db.getPistes().catch(() => []),
+          db.getSettings().catch(() => null),
+        ]);
         if (cancelled) return;
+        const room = pistes.find((p) => p.active)?.name || pistes[0]?.name || 'Main Room';
+        const lmin = settings?.lesson_duration_min ?? 45;
+        const cost = settings?.credit_cost_per_lesson ?? 1;
+        setPisteName(room);
+        setLessonMin(lmin);
+        setCreditCost(cost);
         const list = rows.map(mapDbCoach);
         const from = DAYS[0].date, to = DAYS[DAYS.length - 1].date;
         const bookingsByCoach = await Promise.all(list.map((c) => db.getBookingsForCoachInRange(c.id, from, to).catch(() => [] as Booking[])));
@@ -148,7 +159,7 @@ export default function BookFlow() {
         const s: Record<string, { t: string; piste: string }[]> = {};
         list.forEach((c) => {
           DAYS.forEach((d) => {
-            const daySlots = slotsForCoachDay(c, d, bookedByCoachDay[`${c.id}|${d.date}`] || new Set());
+            const daySlots = slotsForCoachDay(c, d, bookedByCoachDay[`${c.id}|${d.date}`] || new Set(), room);
             if (daySlots.length) s[`${c.id}|${d.id}`] = daySlots;
           });
         });
@@ -331,8 +342,8 @@ export default function BookFlow() {
                 <SummaryRow label="Weapon" value={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><WeaponGlyph type={coach.weapons[0] || 'sabre'} size={18} color={t.colors.steel} /><Text weight="500" size={14} style={{ textTransform: 'capitalize' }}>{coach.weapons[0] || 'sabre'}</Text></View>} />
                 <SummaryRow label="When" value={`${day?.label || day?.dow + ' ' + day?.dom} · ${slot.t}`} />
                 <SummaryRow label="Piste" value={slot.piste} />
-                <SummaryRow label="Length" value="45 min" />
-                <SummaryRow label="Cost" value={<Text color={t.colors.brand} weight="600" size={14}>1 credit</Text>} last />
+                <SummaryRow label="Length" value={`${lessonMin} min`} />
+                <SummaryRow label="Cost" value={<Text color={t.colors.brand} weight="600" size={14}>{creditCost} credit{creditCost === 1 ? '' : 's'}</Text>} last />
               </View>
             )}
             <View style={{ marginTop: 16, padding: 14, backgroundColor: t.colors.surface, borderWidth: 1, borderColor: t.colors.hairline, borderRadius: t.radius.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -355,8 +366,8 @@ export default function BookFlow() {
         <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: t.colors.hairline, backgroundColor: t.colors.surface }}>
           {bookError && <Text color={t.colors.danger} size={12.5} style={{ marginBottom: 10 }}>{bookError}</Text>}
           <PrimaryBtn
-            label={confirming ? 'Booking…' : credits <= 0 ? 'No credits available' : 'Confirm — use 1 credit'}
-            disabled={confirming || credits <= 0}
+            label={confirming ? 'Booking…' : credits < creditCost ? 'Not enough credits' : `Confirm — use ${creditCost} credit${creditCost === 1 ? '' : 's'}`}
+            disabled={confirming || credits < creditCost}
             onPress={confirm}
           />
         </View>

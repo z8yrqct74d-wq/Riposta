@@ -71,6 +71,7 @@ export default function AthleteHome() {
   const { session, coachPending } = useAuth();
   const { member, credits, upcoming } = useAthlete();
   const [planCredits, setPlanCredits] = useState<number | null>(null);
+  const [lessonMin, setLessonMin] = useState(45);
 
   useEffect(() => {
     if (!member?.plan_name) { setPlanCredits(null); return; }
@@ -78,6 +79,10 @@ export default function AthleteHome() {
       .then((ps) => setPlanCredits(ps.find((p) => p.name === member.plan_name)?.credits ?? null))
       .catch(() => {});
   }, [member?.plan_name]);
+
+  useEffect(() => {
+    db.getSettings().then((s) => { if (s?.lesson_duration_min) setLessonMin(s.lesson_duration_min); }).catch(() => {});
+  }, []);
 
   const firstName = ((session?.user?.user_metadata?.full_name as string | undefined) || member?.name || '').split(' ')[0] || 'there';
   const hour = new Date().getHours();
@@ -132,7 +137,7 @@ export default function AthleteHome() {
                     <WeaponGlyph type={nextLesson.weapon || 'sabre'} size={22} color={t.colors.steel} />
                     <Text weight="600" size={16}>Lesson · {coachShortName(nextLesson.coaches?.name || nextLesson.coach_id || '')}</Text>
                   </View>
-                  <Text variant="mono" color={t.colors.muted} size={13} style={{ marginTop: 4 }}>{nextLesson.slot_time} · {nextLesson.piste || 'Riposte Main Room'} · 45 min</Text>
+                  <Text variant="mono" color={t.colors.muted} size={13} style={{ marginTop: 4 }}>{nextLesson.slot_time}{nextLesson.piste ? ` · ${nextLesson.piste}` : ''} · {lessonMin} min</Text>
                 </View>
                 {timeUntil(nextLesson) && (
                   <View style={{ alignItems: 'center', paddingLeft: 8 }}>

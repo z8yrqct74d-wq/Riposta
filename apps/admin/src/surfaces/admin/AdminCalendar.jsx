@@ -16,10 +16,10 @@ export function findConflicts(cand, blocks) {
   return { pisteClash, coachClash, any: pisteClash || coachClash };
 }
 
-function CalBlock({ block, laneWidth, dragState, onPointerDownMove, onPointerDownResize, onClick, shaking, conflictLive, coachMap }) {
+function CalBlock({ block, laneWidth, dragState, onPointerDownMove, onPointerDownResize, onClick, shaking, conflictLive, coachMap, calStart }) {
   const k = KIND[block.kind];
   const isDragging = dragState && dragState.id === block.id;
-  const top = (block.start - CAL_START) * PX_MIN;
+  const top = (block.start - calStart) * PX_MIN;
   const height = block.dur * PX_MIN;
   const clash = isDragging && conflictLive;
   return (
@@ -56,14 +56,18 @@ function CalBlock({ block, laneWidth, dragState, onPointerDownMove, onPointerDow
   );
 }
 
-export function ResourceCalendar({ blocks, setBlocks, onSelect, onCreate, toast, coachMap }) {
+export function ResourceCalendar({ blocks, setBlocks, onSelect, onCreate, toast, coachMap, pistes, calStart, calEnd }) {
   const gridRef = React.useRef(null);
   const [drag, setDrag] = React.useState(null);
   const [shakeId, setShakeId] = React.useState(null);
   const dragRef = React.useRef(null);
   dragRef.current = drag;
 
-  const laneCount = PISTES.length;
+  // Backend pistes carry `name`; the legacy fallback constant uses `label`.
+  const lanes = (pistes && pistes.length ? pistes : PISTES).map(p => ({ id: p.id, label: p.name ?? p.label, electric: p.electric }));
+  const cs = calStart ?? CAL_START;
+  const ce = calEnd ?? CAL_END;
+  const laneCount = lanes.length;
 
   const beginMove = (e, block) => {
     e.preventDefault();
@@ -86,15 +90,15 @@ export function ResourceCalendar({ blocks, setBlocks, onSelect, onCreate, toast,
       const dMin = dy / PX_MIN;
       if (d.mode === 'move') {
         let ns = snap(d.origStart + dMin);
-        ns = Math.max(CAL_START, Math.min(CAL_END - d.origDur, ns));
+        ns = Math.max(cs, Math.min(ce - d.origDur, ns));
         const rect = gridRef.current.getBoundingClientRect();
         const colW = rect.width / laneCount;
         let col = Math.floor((e.clientX - rect.left) / colW);
         col = Math.max(0, Math.min(laneCount - 1, col));
-        setDrag({ ...d, curStart: ns, curPiste: PISTES[col].id });
+        setDrag({ ...d, curStart: ns, curPiste: lanes[col].id });
       } else {
         let nd = snap(d.origDur + dMin);
-        nd = Math.max(30, Math.min(CAL_END - d.origStart, nd));
+        nd = Math.max(30, Math.min(ce - d.origStart, nd));
         setDrag({ ...d, curDur: nd });
       }
     };
@@ -121,15 +125,15 @@ export function ResourceCalendar({ blocks, setBlocks, onSelect, onCreate, toast,
     : b);
   const liveConflict = drag ? findConflicts({ id: drag.id, piste: drag.curPiste, start: drag.curStart, dur: drag.curDur, coach: blocks.find(b=>b.id===drag.id).coach }, blocks).any : false;
 
-  const totalH = (CAL_END - CAL_START) * PX_MIN;
+  const totalH = (ce - cs) * PX_MIN;
   const hourLines = [];
-  for (let t = CAL_START; t <= CAL_END; t += 30) hourLines.push(t);
+  for (let t = cs; t <= ce; t += 30) hourLines.push(t);
 
   const onLaneClick = (e, pisteId) => {
     if (drag) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const y = e.clientY - rect.top;
-    const start = Math.max(CAL_START, Math.min(CAL_END - 45, snap(CAL_START + y / PX_MIN)));
+    const start = Math.max(cs, Math.min(ce - 45, snap(cs + y / PX_MIN)));
     onCreate({ piste: pisteId, start, dur: 45 });
   };
 
@@ -137,7 +141,7 @@ export function ResourceCalendar({ blocks, setBlocks, onSelect, onCreate, toast,
     <div style={{ border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', overflow: 'hidden', background: 'var(--surface)' }}>
       <div style={{ display: 'flex', borderBottom: '1px solid var(--hairline)', background: 'var(--surface)' }}>
         <div style={{ width: 56, flexShrink: 0, borderRight: '1px solid var(--hairline)' }} />
-        {PISTES.map(p => (
+        {lanes.map(p => (
           <div key={p.id} style={{ flex: 1, padding: '10px 10px', borderRight: '1px solid var(--hairline)', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap' }}>{p.label}</span>
             {p.electric && <span title="Electric" style={{ fontSize: 9, fontWeight: 600, color: 'var(--steel)', background: 'var(--steel-tint)', padding: '1px 5px', borderRadius: 'var(--r-pill)' }}>E</span>}
@@ -147,18 +151,18 @@ export function ResourceCalendar({ blocks, setBlocks, onSelect, onCreate, toast,
       <div style={{ display: 'flex', position: 'relative' }}>
         <div style={{ width: 56, flexShrink: 0, position: 'relative', borderRight: '1px solid var(--hairline)', height: totalH }}>
           {hourLines.map(t => t % 60 === 0 && (
-            <div key={t} className="r-tabular" style={{ position: 'absolute', top: (t - CAL_START) * PX_MIN - 7, right: 8, fontSize: 11, color: 'var(--faint)' }}>{fmtTime(t)}</div>
+            <div key={t} className="r-tabular" style={{ position: 'absolute', top: (t - cs) * PX_MIN - 7, right: 8, fontSize: 11, color: 'var(--faint)' }}>{fmtTime(t)}</div>
           ))}
         </div>
         <div ref={gridRef} style={{ flex: 1, display: 'flex', position: 'relative', height: totalH }}>
           {hourLines.map(t => (
-            <div key={t} style={{ position: 'absolute', left: 0, right: 0, top: (t - CAL_START) * PX_MIN, height: 1, background: t % 60 === 0 ? 'var(--hairline)' : 'color-mix(in oklab, var(--hairline) 45%, transparent)', pointerEvents: 'none' }} />
+            <div key={t} style={{ position: 'absolute', left: 0, right: 0, top: (t - cs) * PX_MIN, height: 1, background: t % 60 === 0 ? 'var(--hairline)' : 'color-mix(in oklab, var(--hairline) 45%, transparent)', pointerEvents: 'none' }} />
           ))}
-          {PISTES.map((p, i) => (
+          {lanes.map((p, i) => (
             <div key={p.id} onClick={(e) => onLaneClick(e, p.id)} style={{ flex: 1, position: 'relative', borderRight: i < laneCount - 1 ? '1px solid var(--hairline)' : 'none', cursor: 'copy' }}>
               {renderBlocks.filter(b => b.piste === p.id).map(b => (
                 <CalBlock key={b.id} block={b} dragState={drag} shaking={shakeId === b.id}
-                  conflictLive={liveConflict} coachMap={coachMap}
+                  conflictLive={liveConflict} coachMap={coachMap} calStart={cs}
                   onPointerDownMove={beginMove} onPointerDownResize={beginResize} onClick={onSelect} />
               ))}
             </div>

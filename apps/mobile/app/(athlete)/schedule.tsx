@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme/theme';
@@ -19,12 +19,12 @@ function bookingDayLabel(b: Booking) {
   return b.slot_date === today ? 'Today' : `${DOWS[d.getDay()]} ${d.getDate()}`;
 }
 
-function canRefund(b: Booking) {
+function canRefund(b: Booking, windowHours: number) {
   if (!b?.slot_date || !b?.slot_time) return true;
   const [h, m] = b.slot_time.split(':').map(Number);
   const target = new Date(b.slot_date + 'T00:00:00');
   target.setHours(h, m, 0, 0);
-  return target.getTime() - Date.now() > 12 * 3600 * 1000;
+  return target.getTime() - Date.now() > windowHours * 3600 * 1000;
 }
 
 export default function ScheduleScreen() {
@@ -32,9 +32,14 @@ export default function ScheduleScreen() {
   const { upcoming, memberId, refresh } = useAthlete();
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [cancelHours, setCancelHours] = useState(12);
+
+  useEffect(() => {
+    db.getSettings().then((s) => { if (s?.cancellation_window_hours != null) setCancelHours(s.cancellation_window_hours); }).catch(() => {});
+  }, []);
 
   const item = upcoming.find((b) => b.id === confirmId) || null;
-  const refundable = item ? canRefund(item) : false;
+  const refundable = item ? canRefund(item, cancelHours) : false;
 
   const doCancel = async () => {
     if (!item) return;
@@ -72,7 +77,7 @@ export default function ScheduleScreen() {
                     <Text weight="600" size={14.5}>{coachName(b)}</Text>
                     <Text variant="label" color={t.colors.faint} size={10.5}>Lesson</Text>
                   </View>
-                  <Text variant="mono" color={t.colors.muted} size={12.5} style={{ marginTop: 2 }}>{bookingDayLabel(b)} · {b.slot_time} · {b.piste || 'Riposte Main Room'}</Text>
+                  <Text variant="mono" color={t.colors.muted} size={12.5} style={{ marginTop: 2 }}>{bookingDayLabel(b)} · {b.slot_time}{b.piste ? ` · ${b.piste}` : ''}</Text>
                 </View>
                 <Pressable onPress={() => setConfirmId(b.id)} style={{ borderWidth: 1, borderColor: t.colors.hairline, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 11 }}>
                   <Text color={t.colors.muted} size={12.5} weight="600">Cancel</Text>
@@ -88,7 +93,7 @@ export default function ScheduleScreen() {
           <>
             <Text color={t.colors.muted} size={13.5} style={{ lineHeight: 20, marginBottom: 18 }}>
               {coachName(item)} · {bookingDayLabel(item)} at {item.slot_time}.{' '}
-              {refundable ? 'You’re outside the 12-hour window, so your credit will be refunded.' : 'You’re inside the 12-hour window, so this credit will be forfeited.'}
+              {refundable ? `You’re outside the ${cancelHours}-hour window, so your credit will be refunded.` : `You’re inside the ${cancelHours}-hour window, so this credit will be forfeited.`}
             </Text>
             <Pressable onPress={doCancel} disabled={cancelling} style={{ width: '100%', padding: 14, borderRadius: t.radius.btn, borderWidth: 1, borderColor: t.colors.brand, alignItems: 'center', marginBottom: 8 }}>
               <Text color={t.colors.brand} weight="600" size={15}>{cancelling ? 'Cancelling…' : refundable ? 'Cancel & refund credit' : 'Cancel & forfeit credit'}</Text>

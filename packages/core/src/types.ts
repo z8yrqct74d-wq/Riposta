@@ -189,6 +189,15 @@ export interface Plan {
   created_at?: string;
 }
 
+export interface Piste {
+  id: string;
+  name: string;
+  electric?: boolean;
+  sort?: number;
+  active?: boolean;
+  created_at?: string;
+}
+
 export interface Settings {
   id: number;
   club_name?: string | null;
@@ -199,6 +208,12 @@ export interface Settings {
   digest_enabled?: boolean;
   note_tidying_enabled?: boolean;
   digest_tone?: string | null;
+  // Operating config (add_pistes_and_config.sql)
+  cal_start_min?: number;
+  cal_end_min?: number;
+  lesson_duration_min?: number;
+  credit_cost_per_lesson?: number;
+  booking_slot_min?: number;
   updated_at?: string;
 }
 
