@@ -267,13 +267,14 @@ function EmergencyContacts({ memberId, onClose }: { memberId: string; onClose: (
 export default function ProfileScreen() {
   const t = useTheme();
   const { session } = useAuth();
-  const { member, memberId, refresh } = useAthlete();
+  const { member, memberId, loading, error, refresh } = useAthlete();
   const [picker, setPicker] = useState<null | { field: keyof Member; title: string; options: { value: string; label: string; glyph?: Weapon }[] }>(null);
   const [dobOpen, setDobOpen] = useState(false);
   const [docSheet, setDocSheet] = useState<null | 'medical' | 'federation'>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const [emergencyOpen, setEmergencyOpen] = useState(false);
   const [planOptions, setPlanOptions] = useState<string[]>([]);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     db.getPlans().then((ps) => setPlanOptions(ps.map((p) => p.name))).catch(() => {});
@@ -287,8 +288,10 @@ export default function ProfileScreen() {
   const fedStatus = getDocStatus(member?.federation_licence_url, member?.federation_licence_expiry_date);
 
   const saveField = async (field: keyof Member, value: string) => {
-    if (!memberId) return;
-    try { await db.updateMember(memberId, { [field]: value }); await refresh(); } catch { /* ignore */ }
+    if (!memberId) { setSaveError("Your profile isn't loaded yet — please try again in a moment."); return; }
+    setSaveError(null);
+    try { await db.updateMember(memberId, { [field]: value }); await refresh(); }
+    catch { setSaveError("Couldn't save that change. Please try again."); }
   };
 
   const editAvatar = async () => {
@@ -317,6 +320,15 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
+        {(error || (saveError && !memberId)) && !loading && (
+          <Pressable onPress={refresh} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: t.colors.dangerTint, borderRadius: t.radius.card, padding: 13, marginBottom: 16 }}>
+            <Icon name="alertCircle" size={18} color={t.colors.danger} />
+            <Text style={{ flex: 1 }} color={t.colors.danger} size={13}>{error || saveError} Tap to retry.</Text>
+          </Pressable>
+        )}
+        {saveError && memberId && (
+          <Text color={t.colors.danger} size={12.5} style={{ marginBottom: 12, marginLeft: 2 }}>{saveError}</Text>
+        )}
         <Section title="Documents">
           <ProfileRow label="Medical certificate" value={<VisaBadge status={medStatus} />} onTap={() => setDocSheet('medical')} />
           <ProfileRow label="Federation licence" value={<VisaBadge status={fedStatus} />} onTap={() => setDocSheet('federation')} last />

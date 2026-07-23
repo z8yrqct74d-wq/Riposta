@@ -17,6 +17,8 @@ interface AthleteDataValue {
   credits: number;
   upcoming: Booking[];
   loading: boolean;
+  /** Set when the member profile failed to load (was silently swallowed before). */
+  error: string | null;
   refresh: () => Promise<void>;
   /** Returns true if the booking was actually written, false on failure. */
   book: (slot: BookingSlot) => Promise<boolean>;
@@ -31,12 +33,14 @@ export function AthleteDataProvider({ children }: { children: React.ReactNode })
   const [credits, setCredits] = useState(0);
   const [upcoming, setUpcoming] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     const user = session?.user;
     if (!user) { setLoading(false); return; }
     setLoading(true);
+    setError(null);
     (async () => {
       try {
         const m = await auth.upsertMemberFromAuth(user);
@@ -44,8 +48,9 @@ export function AthleteDataProvider({ children }: { children: React.ReactNode })
         setMember(m); setMemberId(m.id); setCredits(m.credits ?? 0);
         const b = await db.getUpcomingBookings(m.id);
         if (active) setUpcoming(b);
-      } catch {
-        /* leave defaults */
+      } catch (e) {
+        if (active) setError("Couldn't load your profile. Please try again.");
+        console.warn('[AthleteData] member load failed', e);
       } finally {
         if (active) setLoading(false);
       }
@@ -83,7 +88,7 @@ export function AthleteDataProvider({ children }: { children: React.ReactNode })
   }, [memberId, refresh]);
 
   return (
-    <Ctx.Provider value={{ member, memberId, credits, upcoming, loading, refresh, book }}>
+    <Ctx.Provider value={{ member, memberId, credits, upcoming, loading, error, refresh, book }}>
       {children}
     </Ctx.Provider>
   );
