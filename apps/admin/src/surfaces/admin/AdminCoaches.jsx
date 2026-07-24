@@ -1,9 +1,8 @@
 import React from 'react';
+import { AVAIL_DAYS, buildAvailSlots, DEFAULT_AVAIL_SLOTS } from '@riposte/core';
 import { Icon, Avatar, WeaponChip } from '../../components/Shared';
-import { getCoaches, getCoachWeekStats, updateCoachAvailability, createCoach } from '../../lib/db';
+import { getCoaches, getCoachWeekStats, updateCoachAvailability, createCoach, getSettings } from '../../lib/db';
 
-const AVAIL_DAYS  = ['Mon','Tue','Wed','Thu','Fri','Sat'];
-const AVAIL_SLOTS = ['16:00','17:00','18:00','19:00','20:00','21:00'];
 const WEAPONS = ['foil','epee','sabre'];
 
 function slugify(name) {
@@ -57,7 +56,7 @@ function CoachRosterCard({ coach, selected, onSelect }) {
 
 // Availability persists as { slots: { "Mon|17:00": true, … }, blackout: { Wed: true } }
 // — the same shape the coach mobile app reads/writes.
-function AvailGrid({ coach, onSave }) {
+function AvailGrid({ coach, onSave, availSlots }) {
   const [grid, setGrid] = React.useState({});
   const [blackout, setBlackout] = React.useState({});
   const ready = React.useRef(false);
@@ -90,7 +89,7 @@ function AvailGrid({ coach, onSave }) {
           {AVAIL_DAYS.map(d => (
             <div key={d} style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: blackout[d] ? 'var(--danger)' : 'var(--muted)', paddingBottom: 4 }}>{d}</div>
           ))}
-          {AVAIL_SLOTS.map(s => (
+          {availSlots.map(s => (
             <React.Fragment key={s}>
               <div className="r-tabular" style={{ fontSize: 11, color: 'var(--faint)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 6 }}>{s}</div>
               {AVAIL_DAYS.map(d => {
@@ -184,6 +183,13 @@ export function AdminCoaches() {
   const [selected, setSelected] = React.useState(null);
   const [adding, setAdding] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  const [availSlots, setAvailSlots] = React.useState(DEFAULT_AVAIL_SLOTS);
+
+  React.useEffect(() => {
+    getSettings()
+      .then(s => setAvailSlots(buildAvailSlots(s?.cal_start_min ?? 960, s?.cal_end_min ?? 1320, s?.booking_slot_min ?? 15)))
+      .catch(() => {});
+  }, []);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -249,7 +255,7 @@ export function AdminCoaches() {
                 <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{coach.email || 'Weekly availability template'}</div>
               </div>
             </div>
-            <AvailGrid coach={coach} onSave={saveAvail} />
+            <AvailGrid coach={coach} onSave={saveAvail} availSlots={availSlots} />
           </>
         ) : !loading && (
           <div style={{ padding: 40, color: 'var(--muted)', fontSize: 14 }}>No coaches yet. Add one to get started.</div>

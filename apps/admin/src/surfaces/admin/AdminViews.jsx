@@ -2,7 +2,7 @@ import React from 'react';
 import { isoDate } from '@riposte/core';
 import { WeaponGlyph, WEAPON_LABEL, Icon, Avatar, PaymentPill, VisaBadge, WeaponChip } from '../../components/Shared';
 import { KIND, fmtTime } from '../../data/adminData';
-import { getMembers, getCalendarBlocks, getCoaches } from '../../lib/db';
+import { getMembers, getCalendarBlocks, getCoaches, getSettings, getPistes } from '../../lib/db';
 
 export function StatCard({ children, style }) {
   return <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 18, ...style }}>{children}</div>;
@@ -17,11 +17,15 @@ export function AdminDashboard({ onGotoCalendar, onGotoMembers }) {
   const [members, setMembers] = React.useState([]);
   const [blocks, setBlocks] = React.useState([]);
   const [coaches, setCoaches] = React.useState([]);
+  const [settings, setSettings] = React.useState(null);
+  const [pistes, setPistes] = React.useState([]);
 
   React.useEffect(() => {
     getMembers().then(setMembers).catch(() => {});
     getCalendarBlocks(isoDate()).then(setBlocks).catch(() => {});
     getCoaches().then(setCoaches).catch(() => {});
+    getSettings().then(setSettings).catch(() => {});
+    getPistes().then(setPistes).catch(() => {});
   }, []);
 
   const coachName = React.useCallback((id) => {
@@ -50,8 +54,12 @@ export function AdminDashboard({ onGotoCalendar, onGotoMembers }) {
   const overdueCount = members.filter(m => m.pay_status === 'overdue').length;
   const expiringMembers = members.filter(m => m.visa_status === 'expiring' || m.visa_status === 'expired');
 
-  // Main Room occupancy per 2h window (booked minutes / 120).
-  const windows = [[16 * 60, 18 * 60], [18 * 60, 20 * 60], [20 * 60, 22 * 60]];
+  // Occupancy across 3 even windows spanning the real operating hours
+  // (booked minutes / window length), not a fixed 16:00-22:00 assumption.
+  const calStart = settings?.cal_start_min ?? 960;
+  const calEnd = settings?.cal_end_min ?? 1320;
+  const seg = (calEnd - calStart) / 3;
+  const windows = [0, 1, 2].map((i) => [Math.round(calStart + seg * i), Math.round(calStart + seg * (i + 1))]);
   const occupancy = windows.map(([ws, we]) => {
     const booked = blocks.reduce((sum, b) => {
       const bs = b.start, be = b.start + b.dur;
@@ -59,6 +67,8 @@ export function AdminDashboard({ onGotoCalendar, onGotoMembers }) {
     }, 0);
     return Math.round(Math.min(booked / (we - ws), 1) * 100);
   });
+  const activePistes = pistes.filter((p) => p.active !== false);
+  const roomLabel = activePistes.length === 1 ? activePistes[0].name : activePistes.length > 1 ? `${activePistes.length} pistes` : 'Pistes';
 
   const kpis = [
     { label: 'Active members', value: String(activeCount), sub: `${activeCount - trialCount} active · ${trialCount} trial`, color: 'var(--ink)' },
@@ -102,7 +112,7 @@ export function AdminDashboard({ onGotoCalendar, onGotoMembers }) {
         </StatCard>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <StatCard>
-            <CardLabel>Main Room · today</CardLabel>
+            <CardLabel>{roomLabel} · today</CardLabel>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {windows.map(([ws, we], i) => {
                 const label = `${fmtTime(ws)}–${fmtTime(we)}`;

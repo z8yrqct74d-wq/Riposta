@@ -12,7 +12,7 @@ import { Icon } from '../../src/components/Icon';
 import { WeaponGlyph } from '../../src/components/WeaponGlyph';
 import { db } from '../../src/lib/supabase';
 import { useAthlete } from '../../src/athlete/AthleteData';
-import { AVAIL_DAYS, AVAIL_SLOTS, isoDate } from '@riposte/core';
+import { AVAIL_DAYS, buildAvailSlots, DEFAULT_AVAIL_SLOTS, isoDate } from '@riposte/core';
 import type { Coach, Weapon, Booking } from '@riposte/core';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -48,10 +48,10 @@ function mapDbCoach(c: Coach): UICoach {
 
 /** Open slots for one coach on one day: their weekly availability grid, minus a
  * day-of-week blackout, minus times another athlete already booked. */
-function slotsForCoachDay(coach: UICoach, day: Day, bookedTimes: Set<string>, pisteName: string): { t: string; piste: string }[] {
+function slotsForCoachDay(coach: UICoach, day: Day, bookedTimes: Set<string>, pisteName: string, availSlots: string[]): { t: string; piste: string }[] {
   const av = coach.availability;
   if (!day.avDay || !av?.slots || av.blackout?.[day.avDay]) return [];
-  return AVAIL_SLOTS.filter((s) => av.slots[`${day.avDay}|${s}`] && !bookedTimes.has(s)).map((t) => ({ t, piste: pisteName }));
+  return availSlots.filter((s) => av.slots[`${day.avDay}|${s}`] && !bookedTimes.has(s)).map((t) => ({ t, piste: pisteName }));
 }
 
 const DAYS = buildDays();
@@ -141,6 +141,9 @@ export default function BookFlow() {
         const room = pistes.find((p) => p.active)?.name || pistes[0]?.name || 'Main Room';
         const lmin = settings?.lesson_duration_min ?? 45;
         const cost = settings?.credit_cost_per_lesson ?? 1;
+        const availSlots = settings
+          ? buildAvailSlots(settings.cal_start_min ?? 960, settings.cal_end_min ?? 1320, settings.booking_slot_min ?? 15)
+          : DEFAULT_AVAIL_SLOTS;
         setPisteName(room);
         setLessonMin(lmin);
         setCreditCost(cost);
@@ -159,7 +162,7 @@ export default function BookFlow() {
         const s: Record<string, { t: string; piste: string }[]> = {};
         list.forEach((c) => {
           DAYS.forEach((d) => {
-            const daySlots = slotsForCoachDay(c, d, bookedByCoachDay[`${c.id}|${d.date}`] || new Set(), room);
+            const daySlots = slotsForCoachDay(c, d, bookedByCoachDay[`${c.id}|${d.date}`] || new Set(), room, availSlots);
             if (daySlots.length) s[`${c.id}|${d.id}`] = daySlots;
           });
         });

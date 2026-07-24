@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AVAIL_DAYS, AVAIL_SLOTS } from '@riposte/core';
+import { AVAIL_DAYS, buildAvailSlots, DEFAULT_AVAIL_SLOTS } from '@riposte/core';
 import { useTheme } from '../../src/theme/theme';
 import { Text } from '../../src/components/ui';
 import { db } from '../../src/lib/supabase';
@@ -10,13 +10,16 @@ import { useCoach } from '../../src/coach/CoachData';
 export default function Availability() {
   const t = useTheme();
   const { coach } = useCoach();
-  const [grid, setGrid] = useState<Record<string, boolean>>(() => {
-    const g: Record<string, boolean> = {};
-    AVAIL_DAYS.forEach((d) => AVAIL_SLOTS.forEach((s) => { g[`${d}|${s}`] = true; }));
-    return g;
-  });
+  const [availSlots, setAvailSlots] = useState<string[]>(DEFAULT_AVAIL_SLOTS);
+  const [grid, setGrid] = useState<Record<string, boolean>>({});
   const [blackout, setBlackout] = useState<Record<string, boolean>>({});
   const ready = useRef(false);
+
+  useEffect(() => {
+    db.getSettings()
+      .then((s) => setAvailSlots(buildAvailSlots(s?.cal_start_min ?? 960, s?.cal_end_min ?? 1320, s?.booking_slot_min ?? 15)))
+      .catch(() => {});
+  }, []);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Mirror the latest values + a save-pending flag in refs so the unmount
   // cleanup below (which only fires once, with a stale closure otherwise)
@@ -29,10 +32,16 @@ export default function Availability() {
   useEffect(() => {
     if (!coach?.id) return;
     const av = coach.availability_json;
-    if (av?.slots && Object.keys(av.slots).length > 0) setGrid(av.slots);
+    if (av?.slots && Object.keys(av.slots).length > 0) {
+      setGrid(av.slots);
+    } else {
+      const g: Record<string, boolean> = {};
+      AVAIL_DAYS.forEach((d) => availSlots.forEach((s) => { g[`${d}|${s}`] = true; }));
+      setGrid(g);
+    }
     if (av?.blackout) setBlackout(av.blackout);
     ready.current = true;
-  }, [coach?.id]);
+  }, [coach?.id, availSlots]);
 
   useEffect(() => {
     if (!ready.current || !coach?.id) return;
@@ -69,7 +78,7 @@ export default function Availability() {
               <Text key={d} size={11.5} weight="600" color={blackout[d] ? t.colors.danger : t.colors.muted} style={{ flex: 1, textAlign: 'center' }}>{d}</Text>
             ))}
           </View>
-          {AVAIL_SLOTS.map((s) => (
+          {availSlots.map((s) => (
             <View key={s} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
               <Text variant="mono" size={10.5} color={t.colors.faint} style={{ width: 44, textAlign: 'right', paddingRight: 6 }}>{s}</Text>
               {AVAIL_DAYS.map((d) => {

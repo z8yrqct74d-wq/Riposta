@@ -192,7 +192,7 @@ function NotesTab({ notes }) {
             <div style={{ padding: '10px 14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
                 <Icon name="sparkle" size={12} color="var(--steel)" />
-                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--steel)' }}>AI summary</span>
+                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--steel)' }}>Lesson summary</span>
               </div>
               {[['Focus', n.tidied_focus], ['Improved', n.tidied_improved], ['Homework', n.tidied_homework]].filter(([,val]) => val).map(([k, val], j, arr) => (
                 <div key={k} style={{ display: 'flex', gap: 10, padding: '5px 0', borderBottom: j < arr.length-1 ? '1px solid var(--hairline)' : 'none' }}>

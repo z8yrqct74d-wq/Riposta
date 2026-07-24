@@ -43,7 +43,20 @@ export const BLOCK_KIND: Record<BlockKind, { label: string; tone: Tone }> = {
 
 /** Coach availability grid (from CoachApp.jsx). */
 export const AVAIL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-export const AVAIL_SLOTS = ['16:00', '17:00', '18:00', '19:00', '20:00', '21:00'] as const;
+
+/** "HH:MM" slot labels spanning [startMin, endMin) at stepMin intervals — drives
+ * the availability grid + booking slots from settings.cal_start_min/cal_end_min/
+ * booking_slot_min instead of a fixed club-hours assumption. */
+export function buildAvailSlots(startMin: number, endMin: number, stepMin: number): string[] {
+  const slots: string[] = [];
+  for (let m = startMin; m < endMin; m += stepMin) {
+    slots.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+  }
+  return slots;
+}
+
+/** Fallback slots, used only until real settings load. */
+export const DEFAULT_AVAIL_SLOTS = buildAvailSlots(960, 1320, 60);
 
 /** Full weekday labels, Monday-first. */
 export const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
