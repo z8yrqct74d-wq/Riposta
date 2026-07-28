@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Pressable, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import PagerView from 'react-native-pager-view';
 import Svg, { Circle } from 'react-native-svg';
@@ -112,6 +112,7 @@ function SummaryRow({ label, value, last }: { label: string; value: React.ReactN
 export default function BookFlow() {
   const t = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const pager = useRef<PagerView>(null);
   const { credits, book } = useAthlete();
   const [step, setStep] = useState(0);
@@ -222,6 +223,10 @@ export default function BookFlow() {
 
   const headers = ['Pick a coach', 'Choose a time', 'Confirm'];
 
+  // The sticky action bar owns the bottom edge (no tab bar on this screen), so
+  // it carries the home-indicator inset instead of the SafeAreaView.
+  const footer = { padding: 16, paddingBottom: 16 + insets.bottom, borderTopWidth: 1, borderTopColor: t.colors.hairline, backgroundColor: t.colors.surface };
+
   if (booked && coach && slot) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: t.colors.paper, alignItems: 'center', justifyContent: 'center', padding: 28 }}>
@@ -240,7 +245,7 @@ export default function BookFlow() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.colors.paper }}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: t.colors.paper }}>
       <View style={{ padding: 16, gap: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Pressable onPress={() => (step === 0 ? router.back() : go(step - 1))} style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: t.colors.hairline, backgroundColor: t.colors.surface, alignItems: 'center', justifyContent: 'center' }}>
@@ -361,12 +366,12 @@ export default function BookFlow() {
       </PagerView>
 
       {step === 1 && (
-        <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: t.colors.hairline, backgroundColor: t.colors.surface }}>
+        <View style={footer}>
           <PrimaryBtn label={slotIdx == null ? 'Select a time' : 'Continue'} disabled={slotIdx == null} onPress={() => go(2)} />
         </View>
       )}
       {step === 2 && (
-        <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: t.colors.hairline, backgroundColor: t.colors.surface }}>
+        <View style={footer}>
           {bookError && <Text color={t.colors.danger} size={12.5} style={{ marginBottom: 10 }}>{bookError}</Text>}
           <PrimaryBtn
             label={confirming ? 'Booking…' : credits < creditCost ? 'Not enough credits' : `Confirm — use ${creditCost} credit${creditCost === 1 ? '' : 's'}`}

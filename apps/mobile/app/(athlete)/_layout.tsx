@@ -26,6 +26,10 @@ interface TabBarProps {
 function BlurTabBar({ state, navigation }: TabBarProps) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
+  // Routes outside TABS (book, checkin) are full-screen flows with their own
+  // sticky action button. The bar floats over the content, so it would sit on
+  // top of that button — hide it entirely while one of them is focused.
+  if (!TABS[state.routes[state.index]?.name]) return null;
   return (
     <BlurView
       intensity={40}
