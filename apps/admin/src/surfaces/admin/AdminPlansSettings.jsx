@@ -18,11 +18,16 @@ function PlanCard({ plan, onEdit }) {
         <div className="r-display r-tabular" style={{ fontSize: 20, color: 'var(--brand)', textAlign: 'right' }}>{plan.price}</div>
       </div>
       <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>{plan.description}</p>
-      {plan.credits > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        {plan.credits > 0 && (
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--steel)', background: 'var(--steel-tint)', padding: '2px 9px', borderRadius: 'var(--r-pill)' }}>{plan.credits} lesson credit{plan.credits>1?'s':''}</span>
-        </div>
-      )}
+        )}
+        {plan.purchasable && plan.price_amount > 0 && (
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--success)', background: 'var(--success-tint)', padding: '2px 9px', borderRadius: 'var(--r-pill)' }}>
+            Card · {Number(plan.price_amount).toFixed(2)} {plan.currency || 'EUR'}
+          </span>
+        )}
+      </div>
       <button onClick={() => onEdit(plan)} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', marginTop: 4, padding: '7px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'transparent', color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>Edit plan</button>
     </div>
   );
@@ -30,7 +35,7 @@ function PlanCard({ plan, onEdit }) {
 
 function PlanEditor({ plan, onClose, onSave, onDelete }) {
   const isNew = !plan?.id;
-  const [form, setForm] = React.useState({ name: '', sub: '', price: '', credits: 0, description: '', ...plan });
+  const [form, setForm] = React.useState({ name: '', sub: '', price: '', credits: 0, description: '', price_amount: '', currency: 'EUR', purchasable: false, ...plan });
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState(null);
   const set = (patch) => setForm(f => ({ ...f, ...patch }));
@@ -38,11 +43,21 @@ function PlanEditor({ plan, onClose, onSave, onDelete }) {
 
   const submit = async () => {
     if (!form.name.trim()) { setError('Name is required.'); return; }
+    const amount = form.price_amount === '' || form.price_amount === null ? null : Number(form.price_amount);
+    if (amount !== null && (Number.isNaN(amount) || amount < 0)) { setError('Charge amount must be a number.'); return; }
+    if (form.purchasable && !amount) { setError('Set a charge amount before enabling card payments.'); return; }
     setError(null);
     setSaving(true);
+    // `price` is the display string; `price_amount` + `currency` are what the
+    // xMoney checkout actually charges, so they're kept as separate fields.
+    const shared = {
+      name: form.name.trim(), sub: form.sub, price: form.price,
+      credits: Number(form.credits) || 0, description: form.description,
+      price_amount: amount, currency: (form.currency || 'EUR').toUpperCase(), purchasable: !!form.purchasable,
+    };
     try {
-      if (isNew) await onSave({ id: slugify(form.name), name: form.name.trim(), sub: form.sub, price: form.price, credits: Number(form.credits) || 0, description: form.description }, true);
-      else await onSave({ name: form.name.trim(), sub: form.sub, price: form.price, credits: Number(form.credits) || 0, description: form.description }, false, plan.id);
+      if (isNew) await onSave({ id: slugify(form.name), ...shared }, true);
+      else await onSave(shared, false, plan.id);
       onClose();
     } catch (e) {
       setError(e?.message?.includes('duplicate') ? 'A plan with this name already exists.' : (e?.message || 'Could not save plan.'));
@@ -64,6 +79,28 @@ function PlanEditor({ plan, onClose, onSave, onDelete }) {
           ))}
           <div><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Lesson credits</div><input type="number" value={form.credits} onChange={e => set({ credits: e.target.value })} className="r-focusable" style={field} /></div>
           <div><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Description</div><textarea value={form.description || ''} onChange={e => set({ description: e.target.value })} className="r-focusable" style={{ ...field, minHeight: 72, resize: 'vertical' }} /></div>
+
+          {/* Card payments (xMoney) */}
+          <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', letterSpacing: 0.4, textTransform: 'uppercase' }}>Card payments</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 2 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Charge amount</div>
+                <input type="number" step="0.01" min="0" value={form.price_amount ?? ''} onChange={e => set({ price_amount: e.target.value })} className="r-focusable" style={field} placeholder="e.g. 210" />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Currency</div>
+                <input value={form.currency || 'EUR'} onChange={e => set({ currency: e.target.value.toUpperCase() })} maxLength={3} className="r-focusable" style={field} />
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, color: 'var(--ink)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!form.purchasable} onChange={e => set({ purchasable: e.target.checked })} className="r-focusable" />
+              Let athletes pay for this by card in the app
+            </label>
+            <div style={{ fontSize: 12, color: 'var(--faint)', lineHeight: 1.5 }}>
+              The charge amount is what xMoney bills — the price above it is display text only. Credits are granted automatically once the payment clears.
+            </div>
+          </div>
         </div>
         <div style={{ padding: '0 20px' }}>
           {error && <div style={{ marginBottom: 4, fontSize: 12.5, color: 'var(--danger)' }}>{error}</div>}

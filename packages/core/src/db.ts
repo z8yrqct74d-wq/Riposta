@@ -15,6 +15,8 @@ import type {
   Piste,
   Settings,
   Payment,
+  PaymentIntent,
+  CardCheckout,
 } from './types';
 import { isoDate } from './constants';
 
@@ -369,6 +371,58 @@ export function createDb(supabase: SupabaseClient) {
     return row;
   }
 
+  // ── Card payments (xMoney hosted checkout) ─────────────────
+  //
+  // The client's whole role is: ask for a checkout, open the URL it gets
+  // back, then poll the intent. Amounts, the member being charged, and the
+  // credits granted are all decided server-side (supabase/functions/
+  // xmoney-checkout) and settled by the webhook — see docs/xmoney.md.
+
+  /**
+   * Opens a card payment for a plan and returns the URL to send the user to.
+   * Throws with the server's message if the plan isn't purchasable or the
+   * account has no member profile.
+   */
+  async function startCardPayment(planId: string): Promise<CardCheckout> {
+    const { data, error } = await supabase.functions.invoke('xmoney-checkout', { body: { planId } });
+    if (error) {
+      // FunctionsHttpError keeps the response on `context`; the readable
+      // reason ('This plan is not available…') lives in its JSON body.
+      const context = (error as { context?: Response }).context;
+      if (context && typeof context.json === 'function') {
+        try {
+          const body = (await context.json()) as { error?: string };
+          if (body?.error) throw new Error(body.error);
+        } catch (parseError) {
+          if (parseError instanceof Error && parseError.message) throw parseError;
+        }
+      }
+      throw error;
+    }
+    const checkout = data as CardCheckout | null;
+    if (!checkout?.checkoutUrl || !checkout?.intentId) {
+      throw new Error('Could not start the payment.');
+    }
+    return checkout;
+  }
+
+  /** Reads back one payment intent — RLS limits this to the member's own. */
+  async function getPaymentIntent(id: string): Promise<PaymentIntent | null> {
+    const { data, error } = await supabase.from('payment_intents').select('*').eq('id', id).maybeSingle();
+    if (error) throw error;
+    return (data ?? null) as PaymentIntent | null;
+  }
+
+  async function getPaymentIntentsForMember(memberId: string): Promise<PaymentIntent[]> {
+    const { data, error } = await supabase
+      .from('payment_intents')
+      .select('*')
+      .eq('member_id', memberId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as PaymentIntent[];
+  }
+
   async function getBookingsForCoachOnDate(coachId: string, dateStr: string): Promise<Booking[]> {
     const { data, error } = await supabase
       .from('bookings')
@@ -558,6 +612,9 @@ export function createDb(supabase: SupabaseClient) {
     getPaymentsForMember,
     getPayments,
     recordPayment,
+    startCardPayment,
+    getPaymentIntent,
+    getPaymentIntentsForMember,
     getBookingsForCoachOnDate,
     getBookingsForCoachInRange,
     getCoachWeekStats,

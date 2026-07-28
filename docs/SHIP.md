@@ -13,8 +13,11 @@ Never commit secrets. Set these in the respective dashboards.
 |-----|-----|-------|
 | `apps/admin` | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Vercel project env |
 | `apps/mobile` | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` | `.env` locally; Xcode Cloud workflow env vars for CI builds |
+| Edge Functions | `XMONEY_SECRET_KEY`, `XMONEY_SITE_ID` (+ optional `XMONEY_CUSTOMER_COUNTRY`, `XMONEY_APP_RETURN_URL`, `XMONEY_FUNCTIONS_BASE_URL`) | Supabase → Edge Functions → Secrets |
 
-`apps/mobile/.env.example` documents the mobile vars.
+`apps/mobile/.env.example` documents the mobile vars. The xMoney secret key is
+deliberately *not* an `EXPO_PUBLIC_*` var — those are compiled into the app
+binary and readable by anyone who downloads it. See `docs/xmoney.md`.
 
 ## Admin web → Vercel (private, custom domain)
 
@@ -137,3 +140,11 @@ native project to configure a workflow against.
 Before real users: apply `supabase/migrations/add_rls_hardening.sql` and test
 with scoped tokens (see `rewrite-plan.md` → Verification). Coaches/admins must
 sign in once (or be linked manually) so their `user_id` populates.
+
+## Card payments (xMoney)
+
+`docs/xmoney.md` is the runbook: run `add_xmoney_payments.sql`, set the
+function secrets above, deploy the three Edge Functions with `--no-verify-jwt`,
+and point xMoney's notification URL at `…/functions/v1/xmoney-webhook`. Test
+with an `sk_test_` key before switching to `sk_live_` — the key prefix alone
+decides which xMoney environment the checkout posts to.

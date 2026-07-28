@@ -184,11 +184,17 @@ export interface Plan {
   id: string;
   name: string;
   sub?: string | null;
+  /** Display price, e.g. '€120/mo'. Never charged — see `price_amount`. */
   price?: string | null;
   credits: number;
   description?: string | null;
   sort?: number;
   created_at?: string;
+  /** Amount charged for an in-app card payment. */
+  price_amount?: number | null;
+  currency?: string | null;
+  /** Offered for in-app card payment (admin-controlled). */
+  purchasable?: boolean;
 }
 
 export interface Piste {
@@ -230,4 +236,42 @@ export interface Payment {
   status: PayStatus;
   credits_delta?: number;
   created_at?: string;
+  /** 'xmoney' for card payments; null for rows entered by an admin. */
+  provider?: string | null;
+  /** Provider-side transaction id — the webhook's idempotency key. */
+  provider_ref?: string | null;
+  intent_id?: string | null;
+}
+
+export type PaymentIntentStatus = 'pending' | 'paid' | 'failed' | 'canceled' | 'refunded';
+
+/**
+ * One card-payment attempt. Created server-side by the `xmoney-checkout` Edge
+ * Function and settled by `xmoney-webhook`; clients can only read their own.
+ */
+export interface PaymentIntent {
+  id: string;
+  member_id: string;
+  plan_id?: string | null;
+  description?: string | null;
+  amount: number;
+  currency: string;
+  credits: number;
+  status: PaymentIntentStatus;
+  provider: string;
+  transaction_status?: string | null;
+  error_message?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  settled_at?: string | null;
+}
+
+/** What `startCardPayment` hands back to the app. */
+export interface CardCheckout {
+  intentId: string;
+  /** Open this in a browser — it hands off to xMoney's hosted payment page. */
+  checkoutUrl: string;
+  amount: number;
+  currency: string;
+  credits: number;
 }
