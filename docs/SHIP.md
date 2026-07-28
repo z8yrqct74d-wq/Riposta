@@ -70,10 +70,18 @@ already excludes `Pods/` and `build/` — those regenerate on every CI run via
 including `Podfile.lock`, is committed.
 
 `apps/mobile/ios/ci_scripts/`:
-- `ci_post_clone.sh` — Xcode Cloud's Mac images don't ship Node.js by
-  default; this installs it via Homebrew (version pinned by
-  `apps/mobile/.nvmrc`), then runs `npm ci` at the monorepo root (resolves
-  `@riposte/core`) and `pod install` in `ios/`.
+- `ci_post_clone.sh` — Xcode Cloud's Mac images ship neither Node.js nor
+  CocoaPods. This installs Node (major version pinned by
+  `apps/mobile/.nvmrc`) from nodejs.org into `~/.ci-node`, checksum-verified,
+  falling back to `brew install node@<major>` if nodejs.org is unreachable;
+  installs CocoaPods via Homebrew if `pod` isn't already present; then runs
+  `npm ci` at the monorepo root (resolves `@riposte/core`) and `pod install`
+  in `ios/`. It also writes `ios/.xcode.env.local` pinning `NODE_BINARY` to
+  that Node — the archive's "Bundle React Native code and images" phase runs
+  with Xcode's own PATH, which doesn't include the CI Node install, so
+  `.xcode.env`'s `command -v node` would come up empty there. Every step
+  logs with a `[ci_post_clone]` prefix and fails with an explicit message,
+  so a red build points straight at the step that broke.
 - `ci_pre_xcodebuild.sh` — writes `apps/mobile/.env` from the Xcode Cloud
   workflow's environment variables, so Expo's `.env` loader picks up
   `EXPO_PUBLIC_SUPABASE_URL`/`_ANON_KEY` regardless of whether Xcode's build
