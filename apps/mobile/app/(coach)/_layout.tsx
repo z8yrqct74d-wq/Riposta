@@ -46,8 +46,11 @@ function BlurTabBar({ state, navigation }: TabBarProps) {
 }
 
 export default function CoachLayout() {
-  const { session, loading } = useAuth();
+  const { session, role, loading } = useAuth();
   if (!loading && !session) return <Redirect href="/sign-in" />;
+  // Mirror of the athlete layout: bounce back if the resolved role says this
+  // user isn't a coach after all.
+  if (role && role !== 'coach') return <Redirect href="/(athlete)" />;
   return (
     <ThemeProvider role="coach">
       <CoachDataProvider>

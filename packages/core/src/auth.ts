@@ -69,9 +69,13 @@ export function createAuth(supabase: SupabaseClient) {
   async function resolveUserRole(user: AuthUserLike | null | undefined): Promise<RoleResolution> {
     if (!user?.email) return { role: 'athlete', member: null, coach: null, admin: null };
     await linkMyUser().catch(() => {});
-    const admin = await getAdminByEmail(user.email).catch(() => null);
+    // Both lookups in one round trip — precedence is applied below, not by
+    // ordering the requests. This is on the app's cold-start critical path.
+    const [admin, coach] = await Promise.all([
+      getAdminByEmail(user.email).catch(() => null),
+      getCoachByEmail(user.email).catch(() => null),
+    ]);
     if (admin) return { role: 'admin', admin, coach: null, member: null };
-    const coach = await getCoachByEmail(user.email).catch(() => null);
     if (coach) return { role: 'coach', coach, member: null, admin: null };
     const member = await upsertMemberFromAuth(user).catch(() => null);
     return { role: 'athlete', member, coach: null, admin: null };
