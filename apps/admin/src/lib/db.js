@@ -6,6 +6,7 @@ import { db, auth } from './core';
 export const {
   getMembers,
   getMember,
+  createMember,
   updateMemberCredits,
   updateMember,
   getCalendarBlocks,

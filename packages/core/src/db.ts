@@ -72,6 +72,28 @@ export function createDb(supabase: SupabaseClient) {
     if (error) throw error;
   }
 
+  /**
+   * Create a member from the admin console, for athletes the club enrols before
+   * (or without) them signing in. `user_id` stays null: `link_my_user` claims the
+   * row by matching email on their first login, so registering someone here and
+   * having them sign up later converges on this same row rather than a duplicate.
+   */
+  async function createMember(member: Partial<Member>): Promise<Member> {
+    const { data, error } = await supabase
+      .from('members')
+      .insert({
+        credits: 0,
+        pay_status: 'due',
+        visa_status: 'pending',
+        ...member,
+        email: member.email ? member.email.toLowerCase() : null,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Member;
+  }
+
   /** Records a real check-in for the member and bumps their last_seen. */
   async function recordCheckIn(memberId: string): Promise<void> {
     const { error } = await supabase.from('check_ins').insert({ member_id: memberId, date: isoDate() });
@@ -526,6 +548,7 @@ export function createDb(supabase: SupabaseClient) {
   return {
     getMembers,
     getMember,
+    createMember,
     updateMemberCredits,
     updateMember,
     recordCheckIn,

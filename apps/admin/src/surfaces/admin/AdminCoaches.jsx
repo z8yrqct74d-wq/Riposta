@@ -56,25 +56,42 @@ function CoachRosterCard({ coach, selected, onSelect }) {
 
 // Availability persists as { slots: { "Mon|17:00": true, … }, blackout: { Wed: true } }
 // — the same shape the coach mobile app reads/writes.
+/** Order-independent signature of an availability template — only the keys that
+ *  are actually on count, so a server payload and a locally-toggled object with
+ *  the same meaning compare equal. */
+function availSignature(slots, blackout) {
+  const on = (o) => Object.keys(o || {}).filter((k) => o[k]).sort();
+  return JSON.stringify([on(slots), on(blackout)]);
+}
+
 function AvailGrid({ coach, onSave, availSlots }) {
   const [grid, setGrid] = React.useState({});
   const [blackout, setBlackout] = React.useState({});
-  const ready = React.useRef(false);
+  // Signature of what's currently in the database, so the save effect can tell
+  // a real edit from the state settling after a load. This used to be a boolean
+  // armed by a setTimeout(…, 0), which lost the race: the arming tick landed
+  // before the state-settling re-render, so simply opening a coach could fire a
+  // debounced UPDATE writing the same JSON straight back.
+  const persisted = React.useRef(null);
 
   React.useEffect(() => {
-    ready.current = false;
     const av = coach.availability_json || {};
-    setGrid(av.slots && typeof av.slots === 'object' ? av.slots : {});
-    setBlackout(av.blackout && typeof av.blackout === 'object' ? av.blackout : {});
-    // allow one tick before the save effect arms, so loading doesn't re-save
-    const t = setTimeout(() => { ready.current = true; }, 0);
-    return () => clearTimeout(t);
+    const slots = av.slots && typeof av.slots === 'object' ? av.slots : {};
+    const bo = av.blackout && typeof av.blackout === 'object' ? av.blackout : {};
+    persisted.current = availSignature(slots, bo);
+    setGrid(slots);
+    setBlackout(bo);
   }, [coach.id]);
 
-  // Debounced persistence
+  // Debounced persistence — only when the template actually differs from the
+  // stored one, so a no-op write is impossible regardless of effect timing.
   React.useEffect(() => {
-    if (!ready.current) return;
-    const t = setTimeout(() => { onSave(coach.id, { slots: grid, blackout }); }, 500);
+    const sig = availSignature(grid, blackout);
+    if (persisted.current === null || sig === persisted.current) return;
+    const t = setTimeout(() => {
+      persisted.current = sig;
+      onSave(coach.id, { slots: grid, blackout });
+    }, 500);
     return () => clearTimeout(t);
   }, [grid, blackout, coach.id, onSave]);
 
@@ -178,10 +195,12 @@ function AddCoachPanel({ onClose, onCreate }) {
   );
 }
 
-export function AdminCoaches() {
+export function AdminCoaches({ addNonce = 0 }) {
   const [coaches, setCoaches] = React.useState([]);
   const [selected, setSelected] = React.useState(null);
   const [adding, setAdding] = React.useState(false);
+  // "Add coach" also lives in the shared top bar; AdminApp bumps a counter.
+  React.useEffect(() => { if (addNonce > 0) setAdding(true); }, [addNonce]);
   const [loading, setLoading] = React.useState(true);
   const [availSlots, setAvailSlots] = React.useState(DEFAULT_AVAIL_SLOTS);
 

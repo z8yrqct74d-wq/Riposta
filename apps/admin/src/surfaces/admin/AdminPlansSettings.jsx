@@ -81,12 +81,15 @@ function PlanEditor({ plan, onClose, onSave, onDelete }) {
 const money = (n) => `€${Number(n || 0).toFixed(2)}`;
 const shortDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
 
-export function AdminPlans() {
+export function AdminPlans({ addNonce = 0 }) {
   const [view, setView] = React.useState('catalogue');
   const [plans, setPlans] = React.useState([]);
   const [members, setMembers] = React.useState([]);
   const [payments, setPayments] = React.useState([]);
   const [editing, setEditing] = React.useState(null); // plan object or {} for new
+
+  // "New plan" also lives in the shared top bar; AdminApp bumps a counter.
+  React.useEffect(() => { if (addNonce > 0) { setView('catalogue'); setEditing({}); } }, [addNonce]);
 
   const loadPlans = React.useCallback(() => { getPlans().then(setPlans).catch(() => {}); }, []);
   React.useEffect(() => {

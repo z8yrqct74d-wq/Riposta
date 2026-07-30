@@ -2,7 +2,7 @@ import React from 'react';
 import { isoDate } from '@riposte/core';
 import { WeaponGlyph, WEAPON_LABEL, Icon, Avatar, PaymentPill, VisaBadge, WeaponChip } from '../../components/Shared';
 import { KIND, fmtTime } from '../../data/adminData';
-import { getMembers, getCalendarBlocks, getCoaches, getSettings, getPistes } from '../../lib/db';
+import { getMembers, getCalendarBlocks, getCoaches, getSettings, getPistes, getPlans, createMember } from '../../lib/db';
 
 export function StatCard({ children, style }) {
   return <div style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--r-card)', padding: 18, ...style }}>{children}</div>;
@@ -161,11 +161,106 @@ export function AdminDashboard({ onGotoCalendar, onGotoMembers }) {
 
 export const PAY_BAR = { paid: 'var(--success)', due: 'var(--warning)', overdue: 'var(--danger)', refunded: 'var(--hairline)' };
 
-export function AdminMembers({ onSelectMember }) {
+const CATEGORIES = ['U11', 'U14', 'U17', 'U20', 'Senior', 'Veteran'];
+
+/** Enrol an athlete the club already has, ahead of (or without) them signing in.
+ *  Mirrors AddCoachPanel in AdminCoaches.jsx. */
+function AddMemberPanel({ onClose, onCreate, plans }) {
+  const [name, setName] = React.useState('');
+  const [email, setEmail] = React.useState('');
+  const [weapon, setWeapon] = React.useState('sabre');
+  const [category, setCategory] = React.useState('Senior');
+  const [planName, setPlanName] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+
+  const field = { width: '100%', padding: '9px 11px', borderRadius: 'var(--r-btn)', border: '1px solid var(--hairline)', background: 'var(--paper)', font: 'inherit', fontSize: 13.5, color: 'var(--ink)', boxSizing: 'border-box' };
+
+  const submit = async () => {
+    if (!name.trim()) { setErr('Name is required.'); return; }
+    setSaving(true); setErr(null);
+    try {
+      await onCreate({
+        name: name.trim(),
+        email: email.trim() || null,
+        weapon, category,
+        plan_name: planName || null,
+      });
+      onClose();
+    } catch (e) {
+      setErr(e?.message || 'Could not create member.');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(23,21,15,0.18)', zIndex: 40 }} />
+      <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 340, background: 'var(--surface)', borderLeft: '1px solid var(--hairline)', zIndex: 50, boxShadow: 'var(--shadow-raise)', display: 'flex', flexDirection: 'column', animation: 'r-panel 240ms var(--e-enter)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid var(--hairline)' }}>
+          <h2 className="r-display" style={{ margin: 0, fontSize: 20, color: 'var(--ink)' }}>Add member</h2>
+          <button onClick={onClose} className="r-focusable" style={{ font: 'inherit', cursor: 'pointer', border: 'none', background: 'transparent', display: 'flex' }}><Icon name="x" size={18} color="var(--muted)" /></button>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Name</div><input value={name} onChange={e => setName(e.target.value)} className="r-focusable" style={field} placeholder="e.g. Maya Rocha" /></div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Email</div>
+            <input value={email} onChange={e => setEmail(e.target.value)} className="r-focusable" style={field} placeholder="athlete@example.ro" />
+            <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 5 }}>Optional. If set, the app claims this record when they first sign in with that address.</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Weapon</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {['foil','epee','sabre'].map(w => (
+                <button key={w} onClick={() => setWeapon(w)} className="r-focusable" style={{ flex: 1, font: 'inherit', cursor: 'pointer', borderRadius: 'var(--r-btn)', padding: '8px', fontSize: 13, fontWeight: 600, border: '1px solid ' + (weapon===w?'var(--brand)':'var(--hairline)'), background: weapon===w?'var(--brand-tint)':'transparent', color: weapon===w?'var(--brand)':'var(--muted)' }}>{WEAPON_LABEL[w]}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Category</div>
+            <select value={category} onChange={e => setCategory(e.target.value)} className="r-focusable" style={field}>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Plan</div>
+            <select value={planName} onChange={e => setPlanName(e.target.value)} className="r-focusable" style={field}>
+              <option value="">No plan yet</option>
+              {plans.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ padding: '0 20px' }}>
+          {err && <div style={{ marginBottom: 4, fontSize: 12.5, color: 'var(--danger)' }}>{err}</div>}
+        </div>
+        <div style={{ padding: 20, borderTop: '1px solid var(--hairline)' }}>
+          <button onClick={submit} disabled={saving} className="r-focusable" style={{ width: '100%', font: 'inherit', cursor: 'pointer', padding: 11, borderRadius: 'var(--r-btn)', border: 'none', background: 'var(--brand)', color: '#fff', fontSize: 13.5, fontWeight: 600, opacity: saving ? 0.6 : 1 }}>{saving ? 'Adding…' : 'Add member'}</button>
+        </div>
+      </div>
+      <style>{`@keyframes r-panel { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+    </>
+  );
+}
+
+export function AdminMembers({ onSelectMember, addNonce = 0 }) {
   const [q, setQ] = React.useState('');
   const [wf, setWf] = React.useState(null);
   const [allMembers, setAllMembers] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [adding, setAdding] = React.useState(false);
+  const [plans, setPlans] = React.useState([]);
+  const [reload, setReload] = React.useState(0);
+
+  // The "Add member" CTA lives in the shared top bar, so AdminApp signals it by
+  // bumping a counter rather than reaching into this component's state.
+  React.useEffect(() => { if (addNonce > 0) setAdding(true); }, [addNonce]);
+
+  React.useEffect(() => { getPlans().then(setPlans).catch(() => {}); }, []);
+
+  const createNew = React.useCallback(async (member) => {
+    await createMember(member);
+    setReload(n => n + 1);
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -187,11 +282,11 @@ export function AdminMembers({ onSelectMember }) {
       .catch(() => { if (!cancelled) setAllMembers([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [reload]);
 
   const rows = allMembers.filter(m => (!wf || m.weapon === wf) && m.name.toLowerCase().includes(q.toLowerCase()));
   return (
-    <div style={{ display: 'flex', height: '100%' }}>
+    <div style={{ display: 'flex', height: '100%', position: 'relative' }}>
       <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--hairline)', padding: 20, background: 'var(--surface)' }}>
         <div style={{ position: 'relative', marginBottom: 20 }}>
           <Icon name="search" size={16} color="var(--faint)" style={{ position: 'absolute', left: 10, top: 9 }} />
@@ -206,7 +301,10 @@ export function AdminMembers({ onSelectMember }) {
           ))}
         </div>
       </div>
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      {/* minWidth:0 so the table's intrinsic width can't stretch this flex item
+          past the viewport — otherwise the row establishes a wider containing
+          block and the slide-over panel's right:0 lands off-screen. */}
+      <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ textAlign: 'left', color: 'var(--faint)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -244,6 +342,7 @@ export function AdminMembers({ onSelectMember }) {
           </tbody>
         </table>
       </div>
+      {adding && <AddMemberPanel onClose={() => setAdding(false)} onCreate={createNew} plans={plans} />}
     </div>
   );
 }

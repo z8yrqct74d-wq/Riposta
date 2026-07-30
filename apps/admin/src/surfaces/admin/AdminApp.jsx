@@ -1,7 +1,6 @@
 import React from 'react';
 import { isoDate } from '@riposte/core';
 import { Icon, Avatar, WeaponGlyph } from '../../components/Shared';
-import { ChromeWindow } from '../../components/BrowserWindow';
 import { PISTES, CAL_START, CAL_END, KIND } from '../../data/adminData';
 import { ResourceCalendar, findConflicts } from './AdminCalendar';
 import { AdminDashboard, AdminMembers } from './AdminViews';
@@ -250,6 +249,17 @@ function AdminApp() {
 
   const fireToast = (msg, tone) => { setToast({ msg, tone }); setTimeout(() => setToast(null), 2600); };
 
+  // The top bar's primary CTA is shared across surfaces, but each surface owns
+  // its own create flow. This used to call openCreate() unconditionally, so on
+  // Members/Coaches/Plans the button built a calendar-block draft that nothing
+  // rendered — three dead buttons. Bumping a per-surface counter lets each one
+  // open its own panel while keeping their in-page "add" affordances working.
+  const [addNonce, setAddNonce] = React.useState({ members: 0, coaches: 0, plans: 0 });
+  const requestAdd = () => {
+    if (nav === 'calendar') { openCreate({}); return; }
+    if (nav in addNonce) setAddNonce(a => ({ ...a, [nav]: a[nav] + 1 }));
+  };
+
   const openCreate = (partial) => { setPanelConflict(null); setDraft({ kind: 'lesson', title: '', piste: activePistes[0]?.id ?? 'p1', date: selectedDate, start: 18*60, dur: settings?.lesson_duration_min ?? 45, coach: coaches[0]?.id ?? null, weapon: 'sabre', ...partial }); };
   const openEdit = (b) => { setPanelConflict(null); setDraft({ ...b }); };
   const changeDraft = (patch) => setDraft(d => ({ ...d, ...patch }));
@@ -301,13 +311,13 @@ function AdminApp() {
           </div>
         ) : (
           <>
-            <TopBar title={titles[nav][0]} sub={titles[nav][1]} view={view} onView={setView} nav={nav} onNew={() => openCreate({})}
+            <TopBar title={titles[nav][0]} sub={titles[nav][1]} view={view} onView={setView} nav={nav} onNew={requestAdd}
               onPrevDay={() => setSelectedDate(d => shiftDate(d, -1))}
               onNextDay={() => setSelectedDate(d => shiftDate(d, 1))}
               onToday={() => setSelectedDate(isoDate())} />
             <div key={nav} style={{ flex: 1, overflow: 'auto', animation: 'r-fade var(--d-base) var(--e-standard)', minHeight: 0 }}>
               {nav === 'dashboard' && <AdminDashboard onGotoCalendar={() => setNav('calendar')} onGotoMembers={() => setNav('members')} />}
-              {nav === 'members'   && <AdminMembers onSelectMember={setSelMember} />}
+              {nav === 'members'   && <AdminMembers onSelectMember={setSelMember} addNonce={addNonce.members} />}
               {nav === 'calendar'  && (
                 <div style={{ padding: 24 }}>
                   <ResourceCalendar blocks={blocks} setBlocks={setBlocks} onSelect={openEdit} onCreate={openCreate} toast={fireToast} coachMap={coachMap} pistes={activePistes} calStart={calStart} calEnd={calEnd} />
@@ -319,8 +329,8 @@ function AdminApp() {
                   </div>
                 </div>
               )}
-              {nav === 'coaches'  && <AdminCoaches />}
-              {nav === 'plans'    && <AdminPlans />}
+              {nav === 'coaches'  && <AdminCoaches addNonce={addNonce.coaches} />}
+              {nav === 'plans'    && <AdminPlans addNonce={addNonce.plans} />}
               {nav === 'settings' && <AdminSettings />}
             </div>
             {nav === 'calendar' && <SidePanel draft={draft} onChange={changeDraft} onSave={saveDraft} onDelete={deleteDraft} onClose={() => setDraft(null)} conflict={panelConflict} coaches={coaches} pistes={activePistes} calStart={calStart} calEnd={calEnd} />}
@@ -333,25 +343,17 @@ function AdminApp() {
   );
 }
 
+// This used to render the console inside a mock browser window (fake tab bar,
+// fake URL bar) at a fixed 1340×860, centred on a dark backdrop — and CSS-scaled
+// the whole thing down below 900px wide. That framing came from the HTML
+// prototype, where a browser chrome made mockups read as screenshots. Shipped in
+// a real browser it drew a browser inside the browser, wasted the vertical space
+// its tab and URL bars took, and never used more than 1340px of a wider monitor.
+// The console is the page now.
 export function AdminAppPage() {
-  const vw = window.innerWidth;
-  if (vw < 900) {
-    const scale = vw / 1340;
-    return (
-      <div style={{ width: '100vw', height: '100dvh', overflow: 'hidden', background: '#0C1A2E', display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
-        <div style={{ transform: `scale(${scale})`, transformOrigin: 'top center', width: 1340, height: 860, flexShrink: 0 }}>
-          <ChromeWindow width={1340} height={860} url="riposte.salle / calendar" tabs={[{ title: 'Riposte · Admin' }]}>
-            <AdminApp />
-          </ChromeWindow>
-        </div>
-      </div>
-    );
-  }
   return (
-    <div style={{ minHeight: '100vh', background: '#0C1A2E', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-      <ChromeWindow width={1340} height={860} url="riposte.salle / calendar" tabs={[{ title: 'Riposte · Admin' }]}>
-        <AdminApp />
-      </ChromeWindow>
+    <div style={{ height: '100dvh', background: 'var(--paper)' }}>
+      <AdminApp />
     </div>
   );
 }
