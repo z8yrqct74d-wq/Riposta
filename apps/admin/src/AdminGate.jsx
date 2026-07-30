@@ -41,6 +41,33 @@ function GoogleMark({ size = 18 }) {
 }
 
 /**
+ * Shown instead of the gate when the build has no Supabase vars. Without this
+ * the console renders nothing at all — the failure is invisible unless you have
+ * devtools open, which is a bad way to find out a Vercel env var is missing.
+ */
+export function ConfigError() {
+  return (
+    <Shell>
+      <Logo color="var(--danger)" />
+      <h1 className="r-display" style={{ margin: '14px 0 0', fontSize: 22, color: 'var(--ink)' }}>Not configured</h1>
+      <p style={{ margin: '2px 0 0', fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.5 }}>
+        This build is missing its Supabase environment variables, so it can’t reach the club’s data.
+      </p>
+      <div className="r-mono" style={{
+        marginTop: 16, width: '100%', padding: '11px 12px', borderRadius: 'var(--r-btn)',
+        border: '1px solid var(--hairline)', background: 'var(--paper)', textAlign: 'left',
+        fontSize: 12, color: 'var(--ink)', lineHeight: 1.7,
+      }}>
+        VITE_SUPABASE_URL<br />VITE_SUPABASE_ANON_KEY
+      </div>
+      <p style={{ margin: '14px 0 0', fontSize: 12.5, color: 'var(--faint)', lineHeight: 1.5 }}>
+        Set both in the Vercel project’s environment variables and redeploy.
+      </p>
+    </Shell>
+  );
+}
+
+/**
  * Admin-only auth gate. `/admin` was previously wide open; now it resolves
  * the signed-in user's role via core and only renders children for admins.
  * Non-admins (athletes/coaches, or signed-out visitors) are stopped here.
