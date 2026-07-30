@@ -173,6 +173,35 @@ riposte/
 
 ---
 
+## v1 scope cut — no payments or credits in the mobile app
+
+The mobile app ships its first version with **no payment and no lesson-credit
+concepts**. Athletes book freely: nothing checks a balance, nothing is deducted
+when a coach marks a lesson done, and cancelling refunds nothing. This removed
+the athlete "Pay" tab, the Home credit meter and pay-status tile, the booking
+flow's cost/balance rows and its "Not enough credits" block, the coach's credit
+deduction and roster credits column, and the athlete's self-serve Plan picker.
+
+Deliberately **retained**:
+
+- **The admin console** — `Plans & billing`, per-member payment recording, and
+  the pay-status/credit KPIs all still work. It's an internal tool, not
+  store-shipped, so the club can keep its bookkeeping there.
+- **The whole database** — `plans`, `payments`, `members.credits`,
+  `members.plan_name`, `members.pay_status`, `settings.credit_cost_per_lesson`,
+  `settings.dunning_offset_days`, and their RLS policies are untouched.
+- **`@riposte/core`** — `Plan`/`Payment`/`PayStatus` types, `PAYMENT_STATUS`,
+  `getPlans`, `recordPayment`, `updateMemberCredits` etc. remain, since admin
+  uses them.
+
+So re-enabling payments on mobile later is UI work only. Note that
+`settings.cancellation_window_hours` is now unused by mobile — it only ever
+decided whether a cancellation refunded a credit, and was never a hard cutoff.
+The full pre-removal state is preserved on the `archive/payments-and-credits`
+branch (snapshot of `5d9582d`).
+
+---
+
 ## Phase status
 
 - [x] **Phase 0** — monorepo + `@riposte/core` (commit `a1ac8e2`)

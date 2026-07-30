@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { PAYMENT_STATUS, isoDate } from '@riposte/core';
+import { VISA_STATUS, isoDate } from '@riposte/core';
 import type { Booking } from '@riposte/core';
 import { useTheme } from '../../src/theme/theme';
 import { Text, Pill, ColorBarRow } from '../../src/components/ui';
@@ -43,18 +43,7 @@ function timeUntil(b: Booking) {
   return `${hours}h`;
 }
 
-function CreditMeter({ total, left }: { total: number; left: number }) {
-  const t = useTheme();
-  return (
-    <View style={{ flexDirection: 'row', gap: 4 }}>
-      {Array.from({ length: total }).map((_, i) => (
-        <View key={i} style={{ flex: 1, height: 8, borderRadius: 999, backgroundColor: i < left ? t.colors.brand : t.colors.hairline }} />
-      ))}
-    </View>
-  );
-}
-
-function AlertChip({ tone, icon, label, onPress }: { tone: 'warning' | 'danger'; icon: 'clock' | 'money'; label: string; onPress: () => void }) {
+function AlertChip({ tone, icon, label, onPress }: { tone: 'warning' | 'danger'; icon: 'clock'; label: string; onPress: () => void }) {
   const t = useTheme();
   const [fg, bg] = tone === 'danger' ? [t.colors.danger, t.colors.dangerTint] : [t.colors.warning, t.colors.warningTint];
   return (
@@ -69,16 +58,8 @@ export default function AthleteHome() {
   const t = useTheme();
   const router = useRouter();
   const { session, coachPending } = useAuth();
-  const { member, credits, upcoming } = useAthlete();
-  const [planCredits, setPlanCredits] = useState<number | null>(null);
+  const { member, upcoming } = useAthlete();
   const [lessonMin, setLessonMin] = useState(45);
-
-  useEffect(() => {
-    if (!member?.plan_name) { setPlanCredits(null); return; }
-    db.getPlans()
-      .then((ps) => setPlanCredits(ps.find((p) => p.name === member.plan_name)?.credits ?? null))
-      .catch(() => {});
-  }, [member?.plan_name]);
 
   useEffect(() => {
     db.getSettings().then((s) => { if (s?.lesson_duration_min) setLessonMin(s.lesson_duration_min); }).catch(() => {});
@@ -91,11 +72,7 @@ export default function AthleteHome() {
 
   const nextLesson = upcoming[0] ?? null;
   const showCert = member?.visa_status === 'expiring' || member?.visa_status === 'expired';
-  const showPay = member?.pay_status === 'due' || member?.pay_status === 'overdue';
-  // Meter total = the member's plan allotment when known, never less than the
-  // current balance (in case they've topped up beyond it).
-  const creditTotal = Math.max(planCredits ?? 0, credits, 1);
-  const payTone = PAYMENT_STATUS[member?.pay_status ?? 'paid'].tone;
+  const certStatus = VISA_STATUS[member?.visa_status ?? 'valid'];
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.colors.paper }}>
@@ -121,10 +98,9 @@ export default function AthleteHome() {
         </View>
 
         <View style={{ paddingHorizontal: 16, paddingTop: 14, gap: 14 }}>
-          {(showCert || showPay) && (
+          {showCert && (
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              {showCert && <AlertChip tone="warning" icon="clock" label={member?.visa_status === 'expired' ? 'Certificate expired' : 'Certificate expires soon'} onPress={() => router.push('/profile')} />}
-              {showPay && <AlertChip tone="danger" icon="money" label={member?.pay_status === 'overdue' ? 'Payment overdue' : 'Payment due'} onPress={() => router.push('/payments')} />}
+              <AlertChip tone="warning" icon="clock" label={member?.visa_status === 'expired' ? 'Certificate expired' : 'Certificate expires soon'} onPress={() => router.push('/profile')} />
             </View>
           )}
 
@@ -155,17 +131,17 @@ export default function AthleteHome() {
           )}
 
           <View style={{ flexDirection: 'row', gap: 12 }}>
-            <View style={{ flex: 1.3, backgroundColor: t.colors.surface, borderWidth: 1, borderColor: t.colors.hairline, borderRadius: t.radius.card, padding: 14 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-                <Text color={t.colors.muted} size={12.5}>Lesson credits</Text>
-                <Text variant="mono" weight="600" size={18}>{credits}<Text variant="mono" color={t.colors.faint} size={12}>/{creditTotal}</Text></Text>
+            <Pressable onPress={() => router.push('/schedule')} style={{ flex: 1, backgroundColor: t.colors.surface, borderWidth: 1, borderColor: t.colors.hairline, borderRadius: t.radius.card, padding: 14, justifyContent: 'space-between' }}>
+              <Text color={t.colors.muted} size={12.5}>Upcoming</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 5, marginTop: 8 }}>
+                <Text variant="mono" weight="600" size={20}>{upcoming.length}</Text>
+                <Text color={t.colors.faint} size={12}>lesson{upcoming.length === 1 ? '' : 's'}</Text>
               </View>
-              <CreditMeter total={creditTotal} left={credits} />
-            </View>
-            <View style={{ flex: 1, backgroundColor: t.colors.surface, borderWidth: 1, borderColor: t.colors.hairline, borderRadius: t.radius.card, padding: 14, justifyContent: 'space-between' }}>
-              <Text color={t.colors.muted} size={12.5}>Account</Text>
-              <View style={{ marginTop: 8 }}><Pill label={PAYMENT_STATUS[member?.pay_status ?? 'paid'].label} tone={payTone} /></View>
-            </View>
+            </Pressable>
+            <Pressable onPress={() => router.push('/profile')} style={{ flex: 1, backgroundColor: t.colors.surface, borderWidth: 1, borderColor: t.colors.hairline, borderRadius: t.radius.card, padding: 14, justifyContent: 'space-between' }}>
+              <Text color={t.colors.muted} size={12.5}>Certificate</Text>
+              <View style={{ marginTop: 8 }}><Pill label={certStatus.label} tone={certStatus.tone} /></View>
+            </Pressable>
           </View>
 
           <Pressable onPress={() => router.push('/book')} style={{ backgroundColor: t.colors.brand, borderRadius: t.radius.card, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>

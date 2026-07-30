@@ -78,10 +78,6 @@ export default function CoachAthletes() {
                 <Text size={11} color={t.colors.faint} style={{ marginLeft: 'auto' }}>Last {a.lastSeen}</Text>
               </View>
             </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text variant="mono" size={17} weight="600" color={(a.credits ?? 0) <= 1 ? t.colors.danger : t.colors.ink}>{a.credits ?? 0}</Text>
-              <Text size={10} color={t.colors.faint}>credits</Text>
-            </View>
           </View>
         ))}
         {rows.length === 0 && (

@@ -17,7 +17,6 @@ export interface CoachItem {
   blockId?: string;
   bookingId?: string;
   memberId?: string | null;
-  memberCredits?: number | null;
   memberCat?: string | null;
   memberName?: string | null;
 }

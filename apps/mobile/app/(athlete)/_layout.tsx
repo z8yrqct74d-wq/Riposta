@@ -13,7 +13,6 @@ import { useAuth } from '../../src/auth/AuthProvider';
 const TABS: Record<string, { label: string; icon: IconName }> = {
   index: { label: 'Home', icon: 'home' },
   schedule: { label: 'Schedule', icon: 'calendar' },
-  payments: { label: 'Pay', icon: 'card' },
   progress: { label: 'Progress', icon: 'chart' },
   profile: { label: 'Profile', icon: 'user' },
 };
@@ -66,7 +65,6 @@ export default function AthleteLayout() {
         <Tabs tabBar={(props) => <BlurTabBar {...(props as unknown as TabBarProps)} />} screenOptions={{ headerShown: false }}>
           <Tabs.Screen name="index" />
           <Tabs.Screen name="schedule" />
-          <Tabs.Screen name="payments" />
           <Tabs.Screen name="progress" />
           <Tabs.Screen name="profile" />
           <Tabs.Screen name="book" options={{ href: null }} />

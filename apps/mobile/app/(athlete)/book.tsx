@@ -114,7 +114,7 @@ export default function BookFlow() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const pager = useRef<PagerView>(null);
-  const { credits, book } = useAthlete();
+  const { book } = useAthlete();
   const [step, setStep] = useState(0);
   const [coaches, setCoaches] = useState<UICoach[]>([]);
   const [slots, setSlots] = useState<Record<string, { t: string; piste: string }[]>>({});
@@ -127,7 +127,6 @@ export default function BookFlow() {
   const [bookError, setBookError] = useState<string | null>(null);
   const [pisteName, setPisteName] = useState('');
   const [lessonMin, setLessonMin] = useState(45);
-  const [creditCost, setCreditCost] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,13 +140,11 @@ export default function BookFlow() {
         if (cancelled) return;
         const room = pistes.find((p) => p.active)?.name || pistes[0]?.name || 'Main Room';
         const lmin = settings?.lesson_duration_min ?? 45;
-        const cost = settings?.credit_cost_per_lesson ?? 1;
         const availSlots = settings
           ? buildAvailSlots(settings.cal_start_min ?? 960, settings.cal_end_min ?? 1320, settings.booking_slot_min ?? 15)
           : DEFAULT_AVAIL_SLOTS;
         setPisteName(room);
         setLessonMin(lmin);
-        setCreditCost(cost);
         const list = rows.map(mapDbCoach);
         const from = DAYS[0].date, to = DAYS[DAYS.length - 1].date;
         const bookingsByCoach = await Promise.all(list.map((c) => db.getBookingsForCoachInRange(c.id, from, to).catch(() => [] as Booking[])));
@@ -350,17 +347,9 @@ export default function BookFlow() {
                 <SummaryRow label="Weapon" value={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><WeaponGlyph type={coach.weapons[0] || 'sabre'} size={18} color={t.colors.steel} /><Text weight="500" size={14} style={{ textTransform: 'capitalize' }}>{coach.weapons[0] || 'sabre'}</Text></View>} />
                 <SummaryRow label="When" value={`${day?.label || day?.dow + ' ' + day?.dom} · ${slot.t}`} />
                 <SummaryRow label="Piste" value={slot.piste} />
-                <SummaryRow label="Length" value={`${lessonMin} min`} />
-                <SummaryRow label="Cost" value={<Text color={t.colors.brand} weight="600" size={14}>{creditCost} credit{creditCost === 1 ? '' : 's'}</Text>} last />
+                <SummaryRow label="Length" value={`${lessonMin} min`} last />
               </View>
             )}
-            <View style={{ marginTop: 16, padding: 14, backgroundColor: t.colors.surface, borderWidth: 1, borderColor: t.colors.hairline, borderRadius: t.radius.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text color={t.colors.muted} size={13}>Your balance</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text variant="mono" size={18} weight="600">{credits}</Text>
-                <Text color={t.colors.faint} size={12}>credits</Text>
-              </View>
-            </View>
           </ScrollView>
         </View>
       </PagerView>
@@ -374,8 +363,8 @@ export default function BookFlow() {
         <View style={footer}>
           {bookError && <Text color={t.colors.danger} size={12.5} style={{ marginBottom: 10 }}>{bookError}</Text>}
           <PrimaryBtn
-            label={confirming ? 'Booking…' : credits < creditCost ? 'Not enough credits' : `Confirm — use ${creditCost} credit${creditCost === 1 ? '' : 's'}`}
-            disabled={confirming || credits < creditCost}
+            label={confirming ? 'Booking…' : 'Confirm booking'}
+            disabled={confirming}
             onPress={confirm}
           />
         </View>

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, ScrollView, TextInput } from 'react-native';
-import { MotiText } from 'moti';
 import { useTheme } from '../../src/theme/theme';
 import { Text, Avatar, Button } from '../../src/components/ui';
 import { Icon } from '../../src/components/Icon';
@@ -14,9 +13,7 @@ export default function LessonView() {
   const { selected: item, coach } = useCoach();
   const weapon = item?.weapon || 'foil';
   const memberName = item?.memberName || item?.title || 'Athlete';
-  const [credits, setCredits] = useState(item?.memberCredits ?? 0);
   const [done, setDone] = useState(false);
-  const [showMinus, setShowMinus] = useState(false);
   const [marking, setMarking] = useState(false);
   const [markError, setMarkError] = useState<string | null>(null);
   const [focus, setFocus] = useState('');
@@ -25,29 +22,18 @@ export default function LessonView() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
-  const [creditCost, setCreditCost] = useState(1);
-
-  React.useEffect(() => {
-    db.getSettings().then((s) => { if (s?.credit_cost_per_lesson != null) setCreditCost(s.credit_cost_per_lesson); }).catch(() => {});
-  }, []);
 
   const sub = item ? `${item.t}${item.piste ? ` · Piste ${item.piste}` : ''} · ${item.durMin} min` : '';
 
   const markDone = async () => {
-    if (done || marking || !item?.memberId) return; // guard against double-tap
+    // Attendance is the only thing this writes, so a lesson with no booking row
+    // behind it has nothing to record — bail rather than reporting a false save.
+    if (done || marking || !item?.bookingId) return; // also guards double-tap
     setMarking(true);
     setMarkError(null);
     try {
-      // Read the member's current balance fresh rather than trusting the
-      // memberCredits snapshot captured whenever MyDay last loaded — that
-      // snapshot can be stale (a top-up or another lesson since then).
-      const fresh = await db.getMember(item.memberId);
-      const nextCredits = Math.max(0, (fresh?.credits ?? item.memberCredits ?? creditCost) - creditCost);
-      await db.updateMemberCredits(item.memberId, nextCredits);
-      if (item.bookingId) await db.updateBookingAttendance(item.bookingId, 'present');
+      await db.updateBookingAttendance(item.bookingId, 'present');
       setDone(true);
-      setShowMinus(true);
-      setTimeout(() => setCredits(nextCredits), 360);
     } catch {
       setMarkError("Couldn't save — check your connection and try again.");
     } finally {
@@ -80,30 +66,23 @@ export default function LessonView() {
     <View style={{ flex: 1, backgroundColor: t.colors.paper }}>
       <CoachHeader title={memberName} sub={sub} weapon={weapon} live={item?.live} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: t.colors.surface, borderWidth: 1, borderColor: t.colors.hairline, borderRadius: t.radius.card, padding: 14, marginBottom: 14 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Avatar name={memberName} size={40} />
-            <View>
-              <Text weight="600" size={14}>Individual lesson</Text>
-              <Text color={t.colors.muted} size={12} style={{ marginTop: 1 }}>{WEAPON_LABEL[weapon]}{item?.memberCat ? ` · ${item.memberCat}` : ''}</Text>
-            </View>
-          </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            {showMinus && <MotiText from={{ opacity: 1, translateY: 0 }} animate={{ opacity: 0, translateY: -22 }} transition={{ duration: 480 }} style={{ position: 'absolute', top: -14, color: t.colors.brand, fontSize: 13, fontWeight: '600' }}>−1</MotiText>}
-            <Text variant="mono" size={20} weight="600">{credits}</Text>
-            <Text size={10.5} color={t.colors.faint}>credits left</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: t.colors.surface, borderWidth: 1, borderColor: t.colors.hairline, borderRadius: t.radius.card, padding: 14, marginBottom: 14 }}>
+          <Avatar name={memberName} size={40} />
+          <View>
+            <Text weight="600" size={14}>Individual lesson</Text>
+            <Text color={t.colors.muted} size={12} style={{ marginTop: 1 }}>{WEAPON_LABEL[weapon]}{item?.memberCat ? ` · ${item.memberCat}` : ''}</Text>
           </View>
         </View>
 
         {!done ? (
           <>
             {markError && <Text color={t.colors.danger} size={12.5} style={{ marginBottom: 8 }}>{markError}</Text>}
-            <Button label={marking ? 'Saving…' : `Mark done · use ${creditCost} credit${creditCost === 1 ? '' : 's'}`} onPress={markDone} disabled={marking} style={{ marginBottom: 16 }} />
+            <Button label={marking ? 'Saving…' : 'Mark done'} onPress={markDone} disabled={marking} style={{ marginBottom: 16 }} />
           </>
         ) : (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: t.radius.btn, backgroundColor: t.colors.successTint, marginBottom: 16 }}>
             <Icon name="check" size={16} color={t.colors.success} strokeWidth={2.2} />
-            <Text color={t.colors.success} size={13.5} weight="600">Lesson completed · {creditCost} credit{creditCost === 1 ? '' : 's'} deducted</Text>
+            <Text color={t.colors.success} size={13.5} weight="600">Lesson completed</Text>
           </View>
         )}
 

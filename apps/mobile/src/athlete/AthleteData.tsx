@@ -14,7 +14,6 @@ export interface BookingSlot {
 interface AthleteDataValue {
   member: Member | null;
   memberId: string | null;
-  credits: number;
   upcoming: Booking[];
   loading: boolean;
   /** Set when the member profile failed to load (was silently swallowed before). */
@@ -30,7 +29,6 @@ export function AthleteDataProvider({ children }: { children: React.ReactNode })
   const { session } = useAuth();
   const [member, setMember] = useState<Member | null>(null);
   const [memberId, setMemberId] = useState<string | null>(null);
-  const [credits, setCredits] = useState(0);
   const [upcoming, setUpcoming] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +43,7 @@ export function AthleteDataProvider({ children }: { children: React.ReactNode })
       try {
         const m = await auth.upsertMemberFromAuth(user);
         if (!active) return;
-        setMember(m); setMemberId(m.id); setCredits(m.credits ?? 0);
+        setMember(m); setMemberId(m.id);
         const b = await db.getUpcomingBookings(m.id);
         if (active) setUpcoming(b);
       } catch (e) {
@@ -62,14 +60,13 @@ export function AthleteDataProvider({ children }: { children: React.ReactNode })
     if (!memberId) return;
     try {
       const [m, b] = await Promise.all([db.getMember(memberId), db.getUpcomingBookings(memberId)]);
-      if (m) { setMember(m); setCredits(m.credits ?? 0); }
+      if (m) setMember(m);
       setUpcoming(b);
     } catch { /* ignore */ }
   }, [memberId]);
 
   const book = useCallback(async (slot: BookingSlot): Promise<boolean> => {
     if (!memberId) return false;
-    setCredits((c) => c - 1); // optimistic
     let ok = true;
     try {
       await db.createBooking({
@@ -81,14 +78,14 @@ export function AthleteDataProvider({ children }: { children: React.ReactNode })
         weapon: (slot.weapon as Booking['weapon']) ?? null,
       });
     } catch {
-      ok = false; // revert the optimistic decrement below via refresh()
+      ok = false;
     }
-    await refresh(); // re-syncs credits/upcoming from the server either way
+    await refresh(); // re-syncs upcoming from the server either way
     return ok;
   }, [memberId, refresh]);
 
   return (
-    <Ctx.Provider value={{ member, memberId, credits, upcoming, loading, error, refresh, book }}>
+    <Ctx.Provider value={{ member, memberId, upcoming, loading, error, refresh, book }}>
       {children}
     </Ctx.Provider>
   );

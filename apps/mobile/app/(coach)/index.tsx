@@ -43,7 +43,7 @@ function buildDayItems(blocks: CalendarBlock[], bookings: Booking[], todayStr: s
       title: mb?.name || 'Athlete',
       who: [mb?.weapon && mb.weapon[0].toUpperCase() + mb.weapon.slice(1), mb?.category].filter(Boolean).join(' · '),
       weapon: (mb?.weapon as Weapon) || 'foil', piste: resolvePiste(bk.piste ?? null),
-      memberCredits: mb?.credits, memberCat: mb?.category, memberName: mb?.name,
+      memberCat: mb?.category, memberName: mb?.name,
     };
   });
   const all = [...blockItems, ...lessonItems].sort((a, b) => a.startMin - b.startMin);
