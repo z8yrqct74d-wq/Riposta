@@ -12,6 +12,11 @@ built on the shared [`@riposte/core`](../../packages/core) package.
   (`src/components/ui.tsx`)
 - **Icons**: the 35-icon set + `WeaponGlyph` + `RiposteLogo` ported to
   `react-native-svg` (`src/components/`)
+- **3D crest**: the onboarding welcome panel renders
+  `assets/brand/riposta-crest.glb` with `three` on an `expo-gl` surface, drag
+  to spin (`src/components/RiposteCrest3D.tsx`). Falls back to the flat SVG
+  fencer if GL can't come up. `.glb` is registered in `metro.config.js`'s
+  `assetExts`; `expo-gl` autolinks, so an iOS build needs a fresh `pod install`
 - **Auth**: `@supabase/supabase-js` + AsyncStorage; Google OAuth via
   `expo-web-browser` + `expo-auth-session` (PKCE, `riposte://` deep link),
   role routing via `resolveUserRole` from core (`src/auth/AuthProvider.tsx`)

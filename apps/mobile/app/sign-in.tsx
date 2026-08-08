@@ -10,6 +10,7 @@ import { Text } from '../src/components/ui';
 import { Icon } from '../src/components/Icon';
 import type { IconName } from '../src/components/Icon';
 import { RiposteLogo } from '../src/components/RiposteLogo';
+import { RiposteCrest3D } from '../src/components/RiposteCrest3D';
 import { useAuth } from '../src/auth/AuthProvider';
 
 type Role = 'athlete' | 'coach';
@@ -30,6 +31,8 @@ const COACH_FEATURES: Feature[] = [
 
 const N = 4;
 
+// Used to head the welcome panel; the 3D crest took that slot and this is now
+// the fallback for when GL can't come up.
 function FencerHero() {
   const w = 'rgba(255,255,255,0.85)';
   return (
@@ -69,6 +72,9 @@ export default function Onboarding() {
   const pager = useRef<PagerView>(null);
   const { width } = useWindowDimensions();
   const [step, setStep] = useState(0);
+  // Suspended while the crest is being dragged, so the pager doesn't read the
+  // spin as a page swipe.
+  const [pagerEnabled, setPagerEnabled] = useState(true);
   const [role, setRole] = useState<Role>('athlete');
   const [signingIn, setSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
@@ -103,21 +109,21 @@ export default function Onboarding() {
         ref={pager}
         style={{ flex: 1 }}
         initialPage={0}
+        scrollEnabled={pagerEnabled}
         onPageSelected={(e) => setStep(e.nativeEvent.position)}
       >
         {/* 1 · Welcome */}
         <View key="welcome" style={{ width }}>
           <LinearGradient colors={['#1C2A44', '#0D1B2F']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1 }}>
             <SafeAreaView style={{ flex: 1, paddingHorizontal: 28, paddingBottom: 170 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16 }}>
-                <RiposteLogo size={26} color="#fff" />
-                <View>
-                  <Text color="#fff" weight="600" size={17}>Riposte</Text>
-                  <Text color="rgba(255,255,255,0.45)" size={11}>CS Riposta</Text>
-                </View>
-              </View>
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                <FencerHero />
+                <RiposteCrest3D
+                  size={Math.min(width - 56, 320)}
+                  paused={step !== 0}
+                  fallback={<FencerHero />}
+                  onGrab={() => setPagerEnabled(false)}
+                  onRelease={() => setPagerEnabled(true)}
+                />
               </View>
               <View>
                 <Text variant="display" size={36} color="#fff" style={{ lineHeight: 40 }}>Your training, your way.</Text>

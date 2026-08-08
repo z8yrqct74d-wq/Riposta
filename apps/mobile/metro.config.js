@@ -20,6 +20,11 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules/expo/node_modules'),
   path.resolve(workspaceRoot, 'node_modules'),
 ];
+// The onboarding crest is a .glb model read at runtime through expo-asset.
+// Metro treats unknown extensions as source and would try to parse the binary
+// as JavaScript, so it has to be declared an asset instead.
+config.resolver.assetExts = [...config.resolver.assetExts, 'glb'];
+
 // Leave hierarchical lookup ON (Metro's default) so a package's own nested
 // node_modules still resolve — e.g. moti bundles framer-motion under
 // moti/node_modules. Disabling it (as some Expo monorepo templates do)
